@@ -4,11 +4,11 @@
 
 export const CFG = {
   racers: 16, qualifySlots: 8, roundTime: 120, countdown: 3,
-  speed: 7, accelGround: 45, accelAir: 12, gravity: -28, jump: 11,
-  diveSpeed: 13, diveUp: 4, diveLock: 0.9, diveRecover: 0.5,
+  speed: 9.6, accelGround: 80, accelAir: 20, gravity: -30, jump: 13,            // mais rápido e mais ágil (valores nossos)
+  diveSpeed: 17, diveUp: 4.5, diveLock: 0.65, diveRecover: 0.3,
   hw: 0.4, height: 1.6, fallY: -15, seaY: -9.5,
-  hammerKnock: 6.5, hammerUp: 5.5, stunTime: 0.9, bumperPush: 13, bumperUp: 5,
-  moverSpeed: 2.0,
+  hammerKnock: 7.5, hammerUp: 6.5, stunTime: 0.7, bumperPush: 15, bumperUp: 6,
+  moverSpeed: 2.8, iceGrip: 0.14,
 };
 
 export const vec = (x = 0, y = 0, z = 0) => ({ x, y, z });
@@ -17,13 +17,14 @@ export const defaultSpawn = i => ({ x: (i % 4 - 1.5) * 3, y: 0.05, z: 3 - Math.f
 // ------------------------------------------------------------------ mundo
 export function createWorld() {
   return {
-    boxes: [], nodes: [], checkpoints: [], spinners: [], bumpers: [], movers: [],
+    boxes: [], nodes: [], checkpoints: [], spinners: [], bumpers: [], movers: [], itemSpots: [], traps: [], trapSeq: 0,
     finishZ: 0, finishY: -0.5, conveyorZone: null, lanes: false, mt: 0, roundTime: 120,
     spawnFn: defaultSpawn, serverTiles: false, onEvent: null,
   };
 }
 export function clearWorld(w) {
   w.boxes.length = w.nodes.length = w.checkpoints.length = w.spinners.length = w.bumpers.length = w.movers.length = 0;
+  w.itemSpots.length = 0; w.traps.length = 0; w.trapSeq = 0;
   w.finishZ = 0; w.finishY = -0.5; w.conveyorZone = null; w.mt = 0;
 }
 
@@ -77,7 +78,7 @@ export function setDead(b, dead) {
   else { Object.assign(b.min, b.home.min); Object.assign(b.max, b.home.max); }
 }
 export function reviveAll(w) { for (const b of w.boxes) if (b.fall || b.toggle) { setDead(b, false); b.fallT = undefined; b.shake = 0; b.blink = false; } }
-export function resetWorldClock(w) { w.mt = 0; for (const s of w.spinners) s.ang = 0; reviveAll(w); updateWorld(w, 0, []); }
+export function resetWorldClock(w) { w.mt = 0; w.traps.length = 0; for (const sp of w.itemSpots) sp.cool = 0; for (const s of w.spinners) s.ang = 0; reviveAll(w); updateWorld(w, 0, []); }
 
 function updateDynamics(w, dt) {
   for (const b of w.boxes) {
@@ -137,11 +138,13 @@ export function createRacer(i) {
     cp: null, finished: false, rank: 0, qualified: false, eliminated: false, victory: false,
     node: 0, skill: 0.72 + Math.random() * 0.26, startDelay: Math.random() * 0.5, wobble: Math.random() * 9,
     slowT: 0, strafeUntil: 0, strafeDir: 1,
+    item: null, itemCool: 0, useAt: 0, slow: 0, boost: 0, shield: 0,
   };
 }
 export function spawnRacer(r, p) {
   r.pos.x = p.x; r.pos.y = p.y; r.pos.z = p.z; r.vel.x = r.vel.y = r.vel.z = 0; r.yaw = Math.PI;
   r.stun = r.invul = r.dive = r.recover = 0; r.cp = null; r.node = 0; r.splashed = false; r.slowT = 0; r.strafeUntil = 0;
+  r.item = null; r.itemCool = 0; r.useAt = 0; r.slow = r.boost = r.shield = 0;
   r.finished = r.qualified = r.eliminated = false; r.rank = 0; r.ground = null; r.victory = false; r.grounded = false;
 }
 
@@ -190,11 +193,15 @@ export function stepRacer(w, e, dt, inp) {
   if (e.invul > 0) e.invul -= dt;
   if (e.recover > 0) e.recover -= dt;
   if (e.dive > 0) { e.dive -= dt; if (e.dive <= 0) e.recover = CFG.diveRecover; }
+  if (e.slow > 0) e.slow -= dt;
+  if (e.boost > 0) e.boost -= dt;
+  if (e.shield > 0) e.shield -= dt;
+  const spd = CFG.speed * (e.boost > 0 ? ITEM_CFG.turboMul : 1) * (e.slow > 0 ? ITEM_CFG.slowMul : 1);
   if (canControl) {
     const onIce = e.grounded && e.ground && e.ground.ice;
-    const a = (e.grounded ? CFG.accelGround * (onIce ? 0.09 : 1) : CFG.accelAir) * dt;
-    e.vel.x += Math.max(-a, Math.min(a, inp.wx * CFG.speed - e.vel.x));
-    e.vel.z += Math.max(-a, Math.min(a, inp.wz * CFG.speed - e.vel.z));
+    const a = (e.grounded ? CFG.accelGround * (onIce ? CFG.iceGrip : 1) : CFG.accelAir) * dt;
+    e.vel.x += Math.max(-a, Math.min(a, inp.wx * spd - e.vel.x));
+    e.vel.z += Math.max(-a, Math.min(a, inp.wz * spd - e.vel.z));
     if (inp.jump && e.grounded) { e.vel.y = CFG.jump; e.grounded = false; emit(w, 'jump', e); }
     if (inp.dive) {
       const l = Math.hypot(inp.wx, inp.wz);
@@ -239,6 +246,167 @@ export function stepRacer(w, e, dt, inp) {
   if (Math.hypot(e.vel.x, e.vel.z) > 0.8 && e.stun <= 0) e.yaw = Math.atan2(e.vel.x, e.vel.z);
 }
 
+// ------------------------------------------------------------------ poderes
+// Todos os valores abaixo são NOSSOS (design de jogo), balanceados para ninguém ganhar vantagem grande:
+// o sorteio favorece quem está atrás, os poderes ofensivos exigem alvo à frente e o escudo bloqueia um golpe.
+export const ITEMS = ['tongue', 'jump', 'boot', 'slime', 'turbo', 'shield', 'banana', 'thunder'];
+export const ITEM_CFG = {
+  slowT: 3.5, slowMul: 0.5, turboT: 2.4, turboMul: 1.45, shieldT: 6, jumpV: 19, thunderR: 12, thunderStun: 0.9, bananaLife: 30, bananaStun: 1.0,
+  tongueRange: 30, bootRange: 15, slimeRange: 28, pickupR: 1.8, respawn: 15, spacing: 40, useCool: 1.2,
+};
+// pesos por posição (p = 0 líder ... 1 último): quem está atrás recebe mais poderes de ataque/avanço; o líder, defesa e armadilhas
+const WEIGHTS = {
+  tongue: p => 0.15 + 1.6 * p, boot: p => 0.35 + 1.1 * p, slime: () => 1.0, turbo: p => 0.4 + 1.1 * p,
+  jump: p => 0.8 + 0.4 * p, shield: p => 1.5 - 1.1 * p, banana: p => 1.7 - 1.5 * p, thunder: p => 0.5 + 0.7 * p,
+};
+const floorTopAt = (w, x, z, y) => {
+  let best = null;
+  for (const b of w.boxes) {
+    if (b.mover || b.dead || x < b.min.x || x > b.max.x || z < b.min.z || z > b.max.z) continue;
+    if (b.max.y > y - 1.6 && b.max.y < y + 1.2 && (best === null || b.max.y > best)) best = b.max.y;
+  }
+  return best;
+};
+// distribui linhas de caixas ao longo do caminho (largura toda), para todos terem chance de pegar
+export function finalizeWorld(w) {
+  w.itemSpots.length = 0; const n = w.nodes;
+  if (n.length < 2) return;
+  let total = 0; const seg = [];
+  for (let i = 1; i < n.length; i++) { const l = Math.hypot(n[i].x - n[i - 1].x, n[i].z - n[i - 1].z); seg.push(l); total += l; }
+  const first = Math.min(34, total * 0.3), last = total - Math.min(30, total * 0.2);
+  const spacing = Math.max(18, Math.min(ITEM_CFG.spacing, total / 6));      // fases curtas ganham mais linhas
+  for (let s = first; s <= last; s += spacing) {
+    let acc = 0, i = 0; while (i < seg.length - 1 && acc + seg[i] < s) { acc += seg[i]; i++; }
+    const f = seg[i] ? (s - acc) / seg[i] : 0, x = n[i].x + (n[i + 1].x - n[i].x) * f, z = n[i].z + (n[i + 1].z - n[i].z) * f, y = n[i].y + (n[i + 1].y - n[i].y) * f;
+    for (const off of [-3.2, 0, 3.2]) {
+      const top = floorTopAt(w, x + off, z, y);
+      if (top !== null) w.itemSpots.push({ x: x + off, y: top + 1.25, z, cool: 0 });
+    }
+  }
+}
+function rollItem(racers, r) {
+  const live = racers.filter(q => !q.finished).sort((a, b) => a.pos.z - b.pos.z), idx = live.indexOf(r);
+  const p = live.length > 1 && idx >= 0 ? idx / (live.length - 1) : 0.5;
+  const ws = ITEMS.map(k => WEIGHTS[k](p)); let t = Math.random() * ws.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < ITEMS.length; i++) { t -= ws[i]; if (t <= 0) return ITEMS[i]; }
+  return ITEMS[0];
+}
+export const fxBits = r => (r.slow > 0 ? 1 : 0) | (r.boost > 0 ? 2 : 0) | (r.shield > 0 ? 4 : 0) | (r.item ? 8 : 0);
+export const tickBuffs = (r, dt) => { if (r.slow > 0) r.slow -= dt; if (r.boost > 0) r.boost -= dt; if (r.shield > 0) r.shield -= dt; if (r.itemCool > 0) r.itemCool -= dt; };
+export function applyFx(r, fx) {
+  switch (fx.kind) {
+    case 'slow': r.slow = Math.max(r.slow, fx.t); break;
+    case 'boost': r.boost = fx.t; break;
+    case 'shield': r.shield = fx.t; break;
+    case 'stun': r.stun = Math.max(r.stun, fx.t); r.dive = 0; r.vel.x *= 0.3; r.vel.z *= 0.3; break;
+    case 'launch': r.vel.x = fx.vx; r.vel.y = fx.vy; r.vel.z = fx.vz; r.stun = 0.9; r.invul = 1.0; r.dive = 0; r.grounded = false; r.ground = null; break;
+    case 'jump': r.vel.y = fx.vy; r.grounded = false; r.ground = null; break;
+    case 'tp': r.pos.x = fx.x; r.pos.y = fx.y; r.pos.z = fx.z; r.ground = null; break;
+  }
+}
+// pega caixas (quem chega primeiro leva); hooks.ev(evento) avisa a interface
+export function updateItems(w, racers, dt, now, ev) {
+  w.itemSpots.forEach((sp, k) => {
+    if (sp.cool > 0) { sp.cool -= dt; return; }
+    let who = null, bd = 1e9;
+    for (const r of racers) {
+      if (r.item || r.finished || r.itemCool > 0) continue;
+      const d = Math.hypot(r.pos.x - sp.x, r.pos.z - sp.z);
+      if (d < ITEM_CFG.pickupR && r.pos.y < sp.y + 1.2 && r.pos.y + CFG.height > sp.y - 1.0 && d < bd) { bd = d; who = r; }
+    }
+    if (who) { who.item = rollItem(racers, who); who.useAt = now + 0.7 + Math.random() * 2.2; sp.cool = ITEM_CFG.respawn; ev({ k: 'pickup', i: who.i, s: k, item: who.item }); }
+  });
+  for (const r of racers) if (r.itemCool > 0) r.itemCool -= dt;
+}
+const ahead = (racers, u, maxD, maxLat) => {
+  let best = null, bd = 1e9;
+  for (const r of racers) {
+    if (r === u || r.finished) continue;
+    const dz = u.pos.z - r.pos.z; if (dz < 1 || dz > maxD) continue;
+    const dx = r.pos.x - u.pos.x; if (Math.abs(dx) > maxLat || Math.abs(r.pos.y - u.pos.y) > 7) continue;
+    const d = Math.hypot(dz, dx); if (d < bd) { bd = d; best = r; }
+  }
+  return best;
+};
+// usa o item guardado. hooks = { apply(alvo, fx), ev(evento) }. Devolve true se gastou o item.
+export function useItem(w, racers, u, hooks) {
+  const it = u.item; if (!it || u.finished) return false;
+  const { apply, ev } = hooks;
+  const hit = (t, fx) => {            // efeitos negativos: o escudo bloqueia
+    if (t.shield > 0) { t.shield = 0; ev({ k: 'shieldpop', i: t.i }); return false; }
+    apply(t, fx); return true;
+  };
+  let ok = true;
+  switch (it) {
+    case 'tongue': {
+      const t = ahead(racers, u, ITEM_CFG.tongueRange, 9); if (!t) { ok = false; break; }
+      const a = { ...u.pos }, b = { ...t.pos };
+      const blocked = !hit(t, { kind: 'tp', x: a.x, y: a.y + 0.1, z: a.z });
+      if (!blocked) apply(u, { kind: 'tp', x: b.x, y: b.y + 0.1, z: b.z });
+      ev({ k: 'tongue', a: u.i, b: t.i, ax: a.x, ay: a.y, az: a.z, bx: b.x, by: b.y, bz: b.z, blocked });
+      break;
+    }
+    case 'jump': apply(u, { kind: 'jump', vy: ITEM_CFG.jumpV }); ev({ k: 'megajump', i: u.i }); break;
+    case 'boot': {
+      const t = ahead(racers, u, ITEM_CFG.bootRange, 7); if (!t) { ok = false; break; }
+      const side = Math.sign(t.pos.x) || (Math.random() < 0.5 ? -1 : 1);
+      const done = hit(t, { kind: 'launch', vx: side * 13, vy: 9, vz: -3 });
+      ev({ k: 'boot', a: u.i, b: t.i, blocked: !done });
+      break;
+    }
+    case 'slime': {
+      const t = ahead(racers, u, ITEM_CFG.slimeRange, 8); if (!t) { ok = false; break; }
+      const done = hit(t, { kind: 'slow', t: ITEM_CFG.slowT });
+      ev({ k: 'slime', a: u.i, b: t.i, blocked: !done });
+      break;
+    }
+    case 'turbo': apply(u, { kind: 'boost', t: ITEM_CFG.turboT }); ev({ k: 'turbo', i: u.i }); break;
+    case 'shield': apply(u, { kind: 'shield', t: ITEM_CFG.shieldT }); ev({ k: 'shield', i: u.i }); break;
+    case 'banana': {
+      const tr = { id: ++w.trapSeq, x: u.pos.x, y: u.pos.y, z: u.pos.z + 2.0, owner: u.i, life: ITEM_CFG.bananaLife, age: 0 };
+      w.traps.push(tr); if (w.traps.length > 8) w.traps.shift();
+      ev({ k: 'banana', i: u.i, id: tr.id, x: tr.x, y: tr.y, z: tr.z });
+      break;
+    }
+    case 'thunder': {
+      for (const r of racers) {
+        if (r === u || r.finished) continue;
+        if (Math.hypot(r.pos.x - u.pos.x, r.pos.z - u.pos.z) < ITEM_CFG.thunderR && Math.abs(r.pos.y - u.pos.y) < 8) hit(r, { kind: 'stun', t: ITEM_CFG.thunderStun });
+      }
+      ev({ k: 'thunder', i: u.i, x: u.pos.x, y: u.pos.y, z: u.pos.z });
+      break;
+    }
+  }
+  if (!ok) { ev({ k: 'fail', i: u.i }); return false; }
+  u.item = null; u.itemCool = ITEM_CFG.useCool;
+  return true;
+}
+// armadilhas (casca de banana): quem pisa escorrega
+export function updateTraps(w, racers, dt, hooks) {
+  for (let k = w.traps.length - 1; k >= 0; k--) {
+    const t = w.traps[k]; t.age += dt; t.life -= dt;
+    let gone = t.life <= 0;
+    if (!gone) for (const r of racers) {
+      if (r.finished || (r.i === t.owner && t.age < 1.5)) continue;
+      if (Math.hypot(r.pos.x - t.x, r.pos.z - t.z) < 1.15 && Math.abs(r.pos.y - t.y) < 1.4) {
+        if (r.shield > 0) { r.shield = 0; hooks.ev({ k: 'shieldpop', i: r.i }); }
+        else { hooks.apply(r, { kind: 'launch', vx: r.vel.x * 0.5, vy: 7, vz: r.vel.z * 0.5 }); }
+        hooks.ev({ k: 'bananahit', i: r.i, id: t.id }); gone = true; break;
+      }
+    }
+    if (gone) w.traps.splice(k, 1);
+  }
+}
+// IA dos bots para usar poderes
+export function botUseItem(w, racers, b, now, hooks) {
+  if (!b.item || b.itemCool > 0 || b.finished || now < b.useAt) return;
+  let go = true;
+  if (b.item === 'banana') go = racers.some(r => r !== b && !r.finished && r.pos.z > b.pos.z && r.pos.z - b.pos.z < 28 && Math.abs(r.pos.x - b.pos.x) < 9);
+  if (b.item === 'thunder') go = racers.filter(r => r !== b && !r.finished && Math.hypot(r.pos.x - b.pos.x, r.pos.z - b.pos.z) < ITEM_CFG.thunderR).length >= 2;
+  if (b.item === 'jump') go = b.grounded;
+  if (!go || !useItem(w, racers, b, hooks)) b.useAt = now + 0.6;
+}
+
 // ------------------------------------------------------------------ bots
 // now = relógio em segundos (wobble/desvio), racing = a corrida já começou para este bot
 export function botInput(w, b, now, racing = true) {
@@ -275,7 +443,8 @@ export function botInput(w, b, now, racing = true) {
   }
   if (now < (b.strafeUntil || 0)) { const px2 = -dz * b.strafeDir, pz2 = dx * b.strafeDir; dx = dx * 0.5 + px2; dz = dz * 0.5 + pz2; const l2 = Math.hypot(dx, dz) || 1; dx /= l2; dz /= l2; }
   const mx = vl > 2 ? b.vel.x / vl : dx, mz = vl > 2 ? b.vel.z / vl : dz;   // sonda na direção real do movimento
-  const px = b.pos.x + mx * 1.0, pz = b.pos.z + mz * 1.0;
+  const look = 0.55 + vl * 0.11;                      // olha mais longe quanto mais rápido
+  const px = b.pos.x + mx * look, pz = b.pos.z + mz * look;
   let ground = false;
   for (const bx of boxes) if (px > bx.min.x && px < bx.max.x && pz > bx.min.z && pz < bx.max.z && bx.max.y > b.pos.y - 0.6 && bx.max.y < b.pos.y + 0.4) { ground = true; break; }
   const risen = n.y > b.pos.y + 0.8 && l < 5;

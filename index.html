@@ -44,8 +44,25 @@ kbd{display:inline-block;min-width:24px;padding:1px 6px;margin:0 2px;border-radi
 #results tr.q{background:#34d05833}
 #results tr.you{background:#ffe135;color:#1b3a73}
 #results .next{margin:0 0 8px;text-align:center;font-size:18px;font-weight:800;color:#ffe135}
+/* poderes + HUD */
+#item{position:fixed;left:22px;bottom:58px;display:none;align-items:center;gap:12px;padding:10px 16px 10px 12px;border-radius:18px;background:linear-gradient(135deg,#2a1055e6,#12073aE6);border:3px solid var(--c,#fff);box-shadow:0 0 22px var(--c,#fff),inset 0 0 14px #ffffff22;color:#fff;pointer-events:none}
+#item .ico{font-size:44px;line-height:1;filter:drop-shadow(0 0 8px var(--c,#fff))}
+#item .txt b{display:block;font-size:18px;font-weight:900;letter-spacing:1px;color:var(--c,#fff);text-shadow:0 0 8px var(--c,#fff)}
+#item .txt small{display:block;font-size:13px;opacity:.9;max-width:190px}
+#item .key{margin-left:6px;width:34px;height:34px;border-radius:9px;background:#fff;color:#2a1055;font-weight:900;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 0 #0006}
+#item.pop{animation:pop .35s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+#toast{position:fixed;top:19%;left:0;right:0;text-align:center;font-size:40px;font-weight:900;opacity:0;pointer-events:none;-webkit-text-stroke:2px #1a0d2e;text-shadow:0 4px 12px #000a,0 0 22px currentColor;letter-spacing:1px}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;mix-blend-mode:screen}
+#prog{position:fixed;top:8px;left:50%;transform:translateX(-50%);width:min(560px,60vw);height:12px;border-radius:8px;background:#1a0d2e99;border:2px solid #ffffff55;display:none;pointer-events:none;box-shadow:0 0 12px #b86bff88}
+#prog i{position:absolute;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;border:1px solid #1a0d2e;box-shadow:0 0 6px currentColor}
+#prog i.me{width:16px;height:16px;margin:-8px 0 0 -8px;border:3px solid #fff;z-index:2;box-shadow:0 0 12px #fff}
+#hud{top:26px;text-shadow:0 2px 6px #1a0d2ecc,0 0 14px #b86bff88}
+#home,#results,#menu{background:linear-gradient(160deg,#3b1480ee,#16084aee);border:2px solid #ff8ae255;box-shadow:0 10px 40px #000a,0 0 30px #b86bff55}
+#home h1{background:linear-gradient(90deg,#ffe135,#ff4fa3,#4fe3ff);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:0;filter:drop-shadow(0 3px 0 #1a0d2e) drop-shadow(0 0 14px #ff4fa388)}
+#home button.big{background:linear-gradient(180deg,#5dff7a,#1fc24a);box-shadow:0 5px 0 #0f7a2b,0 0 18px #5dff7a88}
 </style></head><body>
-<div id="hud"></div><div id="msg"></div>
+<div id="hud"></div><div id="msg"></div><div id="prog"></div><div id="item"></div><div id="toast"></div><div id="flash"></div>
 <div id="menu"></div><div id="spec"></div><div id="specTime"></div><div id="results"></div>
 <div id="home">
   <h1>POKE RUN</h1>
@@ -54,6 +71,6 @@ kbd{display:inline-block;min-width:24px;padding:1px 6px;margin:0 2px;border-radi
   <div class="row"><button id="playBtn" class="big">PLAY</button><button id="practiceBtn" class="alt">Practice (offline)</button></div>
   <div class="tip">Pick your character (← → keys work too) · online races with up to 16 players, bots fill empty spots</div>
 </div>
-<div id="help">WASD move · Space jump · Shift/E dive · drag mouse / Q-Z rotate camera · R restart (practice) · N/B next/prev (practice) · M menu</div>
+<div id="help">WASD move · Space jump · Shift/E dive · F use power · V effects · drag mouse / Q-Z rotate camera · R restart (practice) · N/B next/prev (practice) · M menu</div>
 <script type="module" src="main.js"></script>
 </body></html>

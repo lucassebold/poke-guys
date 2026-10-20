@@ -15,7 +15,8 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { CFG, createWorld, makeHeadlessAPI, applyLevelToWorld, createRacer, spawnRacer, stepRacer, botInput,
-  updateWorld, resetWorldClock, triggerFallUnder, deadTileIndices, nearestNodeAhead } from './shared/sim.js';
+  updateWorld, resetWorldClock, triggerFallUnder, deadTileIndices, nearestNodeAhead,
+  finalizeWorld, updateItems, updateTraps, botUseItem, useItem, applyFx, fxBits, tickBuffs } from './shared/sim.js';
 import { makeLevels } from './shared/levels.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -33,8 +34,8 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.wav': 'audio/wav', '.obj': 'text/plain; charset=utf-8', '.ico': 'image/x-icon' };
 const GZ = new Set(['.html', '.js', '.json', '.obj', '.wav']);
 const gzCache = new Map();
-const PUBLIC_DIRS = ['assets/', 'shared/', 'levels/'];
-const PUBLIC_ROOT = new Set(['index.html', 'main.js', 'net.js', 'anim.js', 'env.js', 'pokemon.js', 'OBJLoader.js', 'three.module.js']);
+const PUBLIC_DIRS = ['assets/', 'shared/', 'levels/', 'addons/'];
+const PUBLIC_ROOT = new Set(['index.html', 'main.js', 'net.js', 'anim.js', 'env.js', 'pokemon.js', 'fx.js', 'OBJLoader.js', 'three.module.js']);
 function serveStatic(req, res) {
   let rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '');
   if (rel === '') rel = 'index.html';
@@ -69,6 +70,8 @@ class Room {
     this.id = ++roomSeq; this.slots = Array(SLOTS).fill(null); this.clients = new Set();
     this.recent = []; this.levelIndex = this.pickLevel(); this.phase = 'lobby'; this.lobbyLeft = LOBBY_SECONDS; this.sendAcc = 0;
     this.finishedCount = 0; this.endTimer = 0; this.raceT = 0; this.leftT = 0; this.cd = 0; this.nextLevel = null; this.resultsLeft = 0;
+    this.evq = []; this.ibKey = ''; this.trKey = '';
+    this.hooks = { apply: (r, fx) => { if (r.human) send(r.human, { t: 'fx', fx }); applyFx(r, fx); }, ev: e => this.evq.push(e) };
     this.buildWorld(); this.last = Date.now(); this.tickN = 0; this.deadKey = '';
     this.timer = setInterval(() => this.tick(), 1000 / 60);
     log(`room ${this.id} created (${LEVELS[this.levelIndex].name})`);
@@ -78,7 +81,7 @@ class Room {
     const i = opts[rand(opts.length)]; this.recent.push(i); if (this.recent.length > Math.min(4, LEVELS.length - 2)) this.recent.shift(); return i;
   }
   buildWorld() {
-    const lv = LEVELS[this.levelIndex], w = createWorld(); applyLevelToWorld(w, lv); lv.build(makeHeadlessAPI(w)); resetWorldClock(w);
+    const lv = LEVELS[this.levelIndex], w = createWorld(); applyLevelToWorld(w, lv); lv.build(makeHeadlessAPI(w)); finalizeWorld(w); resetWorldClock(w);
     this.world = w; this.level = lv; this.roundTime = w.roundTime;
   }
   humans() { return this.slots.filter(r => r && r.human).length; }
@@ -120,7 +123,14 @@ class Room {
   sendRound(c) {
     const left = this.phase === 'race' ? Math.max(0, this.leftT) : this.roundTime;
     send(c, { t: 'round', phase: this.phase, level: this.levelIndex, name: this.level.name, you: c.slot, slots: this.slotsInfo(), cd: Math.max(0, this.cd || 0), left,
-      mt: this.world.mt, roundTime: this.roundTime, dead: deadTileIndices(this.world), fc: this.finishedCount || 0 });
+      mt: this.world.mt, roundTime: this.roundTime, dead: deadTileIndices(this.world), fc: this.finishedCount || 0, ib: this.coolSpots() });
+  }
+
+  coolSpots() { const o = []; this.world.itemSpots.forEach((sp, k) => { if (sp.cool > 0) o.push(k); }); return o; }
+  onUse(c) {
+    const r = this.slots[c.slot];
+    if (this.phase !== 'race' || !r || r.human !== c || r.finished || !r.item) return;
+    useItem(this.world, this.slots.filter(Boolean), r, this.hooks);
   }
 
   startRound() {
@@ -131,8 +141,9 @@ class Room {
     for (let i = 0; i < SLOTS; i++) {
       let r = this.slots[i];
       if (!r || !r.human) { r = createRacer(i); r.human = null; const pk = free.length ? free.pop() : rand(SPECIES.length); r.pk = pk; r.name = SPECIES[pk]; this.slots[i] = r; }
-      spawnRacer(r, this.world.spawnFn(i)); r.finTime = null; r.rep = 1;
+      spawnRacer(r, this.world.spawnFn(i)); r.finTime = null; r.rep = 1; r.itemSent = null;
     }
+    this.evq.length = 0; this.ibKey = ''; this.trKey = '';
     this.phase = 'countdown'; this.cd = CFG.countdown; this.finishedCount = 0; this.endTimer = 0; this.raceT = 0; this.leftT = this.roundTime; this.deadKey = '';
     for (const c of this.clients) this.sendRound(c);
     log(`room ${this.id}: round "${this.level.name}" with ${this.humans()} humans + ${SLOTS - this.humans()} bots`);
@@ -184,7 +195,8 @@ class Room {
         if (this.endTimer > 0) { this.endTimer -= dt; if (this.endTimer <= 0) this.endRound(); }
         if (this.phase === 'race' && this.leftT <= 0) this.endRound();
       }
-      const racing = this.phase === 'race', ns = now / 1000;
+      const racing = this.phase === 'race', ns = now / 1000, all = this.slots.filter(Boolean);
+      if (racing) { updateItems(w, all, dt, ns, this.hooks.ev); updateTraps(w, all, dt, this.hooks); for (const r of bots) botUseItem(w, all, r, ns, this.hooks); for (const h of humans) { tickBuffs(h, dt); if (h.item !== h.itemSent) { send(h.human, { t: 'inv', item: h.item }); h.itemSent = h.item; } } }
       for (const r of bots) {
         let inp = { wx: 0, wz: 0, jump: false, dive: false };
         if (racing && !r.finished && this.raceT > r.startDelay) { const b = botInput(w, r, ns, true); inp = { wx: b[0], wz: b[1], jump: b[2], dive: b[3] }; }
@@ -203,13 +215,16 @@ class Room {
     for (const r of this.slots) {
       if (!r) continue;
       const fl = r.human ? (r.rep & 15) : ((r.grounded ? 1 : 0) | (r.dive > 0 ? 2 : 0) | (r.stun > 0 ? 4 : 0));
-      list.push([r.i, r2(r.pos.x), r2(r.pos.y), r2(r.pos.z), r2(r.yaw), r2(r.vel.x), r2(r.vel.y), r2(r.vel.z), fl | (r.victory ? 8 : 0) | (r.finished ? 16 : 0) | (r.qualified ? 32 : 0) | (r.eliminated ? 64 : 0)]);
+      list.push([r.i, r2(r.pos.x), r2(r.pos.y), r2(r.pos.z), r2(r.yaw), r2(r.vel.x), r2(r.vel.y), r2(r.vel.z), fl | (r.victory ? 8 : 0) | (r.finished ? 16 : 0) | (r.qualified ? 32 : 0) | (r.eliminated ? 64 : 0), fxBits(r)]);
     }
     const dead = deadTileIndices(w), key = dead.join(',');
     const m = { t: 'snap', ph: this.phase, mt: r2(w.mt), r: list, fc: this.finishedCount || 0 };
     if (this.phase === 'race') m.left = r2(Math.max(0, this.leftT));
     if (this.phase === 'countdown') m.cd = r2(Math.max(0, this.cd));
     if (key !== this.deadKey || this.tickN % 100 === 0) { m.dead = dead; this.deadKey = key; }
+    const ib = this.coolSpots(), ibk = ib.join(','); if (ibk !== this.ibKey || this.tickN % 100 === 0) { m.ib = ib; this.ibKey = ibk; }
+    const trk = w.traps.map(t => t.id).join(','); if (trk !== this.trKey || this.tickN % 100 === 0) { m.tr = w.traps.map(t => [t.id, r2(t.x), r2(t.y), r2(t.z)]); this.trKey = trk; }
+    if (this.evq.length) { m.ev = this.evq.splice(0, 30); }
     const s = JSON.stringify(m);
     for (const c of this.clients) if (c.ws.readyState === 1) c.ws.send(s);
   }
@@ -240,6 +255,7 @@ wss.on('connection', ws => {
       if (!room || !room.addHuman(c)) { send(c, { t: 'full' }); ws.close(); }
     } else if (m.t === 's' && c.room) c.room.onState(c, m.p);
     else if (m.t === 'fin' && c.room) c.room.onFin(c, m.p);
+    else if (m.t === 'use' && c.room) c.room.onUse(c);
     else if (m.t === 'ping') send(c, { t: 'pong' });
   });
   ws.on('close', () => { if (c.room) c.room.removeHuman(c); });

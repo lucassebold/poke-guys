@@ -13,7 +13,12 @@ ou `npm install` + `node server.js`, e abra http://localhost:8765. Para testar c
 Variáveis opcionais: `PORT` (padrão 8765) · `LOBBY_SECONDS` (espera do lobby, padrão 10) · `RESULTS_SECONDS` (tabela, padrão 9) · `MAX_ROOMS` (padrão 30).
 
 ## Controles
-WASD mover · Espaço pular · Shift/E mergulhar · arrastar o mouse (ou Q/Z) gira a câmera · M volta ao menu.
+WASD mover · Espaço pular · Shift/E mergulhar · arrastar o mouse (ou Q/Z) gira a câmera · M volta ao menu · **F** usa o poder · **V** liga/desliga efeitos (bloom).
+
+## Poderes
+Caixas coloridas "?" aparecem a cada ~40 m (3 por linha, respawn 15 s). Quem encosta primeiro leva; o sorteio favorece quem está atrás. Poderes ofensivos precisam de alguém à frente.
+Língua (troca de lugar com quem está à frente) · Mega pulo · Bota (chuta quem está à frente) · Slime (deixa lento) · Turbo · Escudo (bloqueia 1 golpe) · Banana (armadilha) · Trovão (atordoa quem está perto).
+O servidor é dono do inventário e dos efeitos; use `?lowfx` na URL para desligar o bloom.
 Depois que você termina, vira espectador: ◀ ▶ (ou A/D, ou clique nas laterais) trocam o alvo.
 **Practice (offline)** deixa jogar qualquer uma das 12 fases sozinho (R reinicia, N/B trocam de fase).
 

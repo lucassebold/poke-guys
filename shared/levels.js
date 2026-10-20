@@ -24,7 +24,7 @@ export function makeLevels(data) {
         node(x, z);
       }
       A.platform(0, 0, -62, -50, 16, 'grass'); A.checkpoint(0, 0, -56); node(0, -56);
-      A.platform(0, 0, -100, -65, 12, 'metal', { conv: V(0, 0, 2.2) });
+      A.platform(0, 0, -100, -65, 12, 'metal', { conv: V(0, 0, -3.2) });
       A.conveyorZone([-105, -60]);
       A.spinner(0, 0.7, -78, 4.8, 1.2);
       A.spinner(0, 0.7, -90, 4.8, -1.4);
@@ -210,15 +210,15 @@ export function makeLevels(data) {
       const { line, finishAt } = helpers(A), V = A.vec;
       A.startPlatform('metal');
       const belt = (z0, z1, w, cx, cz) => A.platform(0, 0, z0, z1, w, 'metal', { conv: V(cx, 0, cz) });
-      belt(-30, -14, 12, 0, 3.4); belt(-48, -33, 12, 3, 0); belt(-66, -51, 12, -3, 0); belt(-86, -69, 12, 0, 4.4);
+      belt(-30, -14, 12, 0, -4); belt(-48, -33, 12, 3, 0); belt(-66, -51, 12, -3, 0); belt(-86, -69, 12, 0, -5);
       A.spinner(0, 0.7, -77, 4.8, 1.8);
       line(0, -18, -84, 6);
       A.platform(0, 0, -102, -89, 16, 'stone'); A.checkpoint(0, 0, -95); A.node(0, -95);
-      belt(-136, -105, 16, 0, 2);
+      belt(-136, -105, 16, 0, -3);
       [-114, -121, -128].forEach((z, i) => A.mover({ a: [-7, 0.7, z], b: [7, 0.7, z], size: [3, 1.4, 1.2], speed: 3.6 + i * 0.6, phase: i * 5, theme: 'wall7' }));
       line(0, -108, -134, 6);
       A.platform(0, 0, -154, -139, 16, 'stone'); A.checkpoint(0, 0, -146); A.node(0, -146);
-      [[-172, -157, -5], [-190, -175, 5], [-208, -193, -5], [-226, -211, 5]].forEach(([z0, z1, c]) => { belt(z0, z1, 7, 0, c); A.node(0, (z0 + z1) / 2); });
+      [[-172, -157, -5], [-190, -175, -6], [-208, -193, -5], [-226, -211, -6]].forEach(([z0, z1, c]) => { belt(z0, z1, 7, 0, c); A.node(0, (z0 + z1) / 2); });
       A.platform(0, 0, -260, -230, 16, 'gold'); finishAt(0, 0, -245, 16); A.node(0, -246);
     },
   };
@@ -307,7 +307,7 @@ export function makeLevels(data) {
         A.mover({ a: [-3.0, 6, -137 - i * 7.4], b: [3.0, 6, -137 - i * 7.4], size: [5.2, 1, 5.2], speed: 1.5, phase: i * 2.1, theme: 'mover7' });
       }
       A.platform(0, 6, -193, -179, 14, 'stone'); A.checkpoint(0, 6, -186, 14);
-      A.platform(0, 6, -231, -196, 11, 'metal', { conv: V(0, 0, 3.2) });                     // 5) conveyor + spinners
+      A.platform(0, 6, -231, -196, 11, 'metal', { conv: V(0, 0, -4) });                     // 5) conveyor + spinners
       A.spinner(0, 6.7, -207, 4.4, 1.8); A.spinner(0, 6.7, -219, 4.4, -2);
       A.platform(0, 6, -249, -234, 16, 'stone'); A.checkpoint(0, 6, -241);
       for (let j = 0; j < 8; j++) for (let i = 0; i < 4; i++) A.platform((i - 1.5) * P, 6, -252 - j * P - S / 2, -252 - j * P + S / 2, S, (i + j) % 2 ? 'tileA' : 'tileB', { fall: true, pillars: false });   // 6) falling tiles
@@ -319,6 +319,23 @@ export function makeLevels(data) {
     },
   };
 
+  // ---- escala: personagem mais rápido => pistas mais longas. Tudo que fica além da largada (z < -12) é esticado em K.
+  const K = 1.45, TK = 1.3;
+  const sz = z => (z >= -12 ? z : -12 + (z + 12) * K);
+  const scaleAPI = A => ({
+    ...A,
+    platform: (cx, topY, z0, z1, w, th, ex) => A.platform(cx, topY, sz(z0), sz(z1), w, th, ex),
+    box: (x0, x1, y0, y1, z0, z1, th, ex) => A.box(x0, x1, y0, y1, sz(z0), sz(z1), th, ex),
+    mover: o => A.mover({ ...o, a: [o.a[0], o.a[1], sz(o.a[2])], b: [o.b[0], o.b[1], sz(o.b[2])], speed: (o.speed || 2) * 1.25 }),
+    spinner: (cx, cy, cz, L, sp) => A.spinner(cx, cy, sz(cz), L, sp * 1.2),
+    bumper: (x, z, y) => A.bumper(x, sz(z), y),
+    trampoline: (cx, z0, z1, w, y, b2) => A.trampoline(cx, sz(z0), sz(z1), w, y, b2),
+    checkpoint: (x, y, z, w, d, ry) => A.checkpoint(x, y, sz(z), w, d, ry),
+    finish: (x, y, z, w) => A.finish(x, y, sz(z), w),
+    node: (x, z, y) => A.node(x, sz(z), y),
+    strip: (cx, y, cz, w, d, t, rx, ry, tint) => A.strip(cx, y, sz(cz), w, d, t, rx, ry, tint),
+    conveyorZone: z => A.conveyorZone(z && [sz(z[0]), sz(z[1])]),
+  });
   return [course, moving, hammerAlley, bumperGarden, iceRink, fallingTiles, towers, conveyors, sweeper, skyHop, stairway, finale]
-    .map(l => ({ spawn: defaultSpawn, ...l }));
+    .map(l => ({ spawn: defaultSpawn, ...l, time: Math.ceil((l.time || 120) * TK), build: A => l.build(scaleAPI(A)) }));
 }
