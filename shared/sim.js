@@ -219,7 +219,14 @@ export function stepRacer(w, e, dt, inp) {
   moveAxis(w, e, 'y', e.vel.y * dt);
   if (e.grounded && !e.wasG && vyBefore < -7) emit(w, 'land', e);
   if (e.grounded && e.ground && e.ground.fall && e.ground.fallT === undefined) e.ground.fallT = 0.5;   // piso que cai: 0,5 s depois de pisado
-  if (e.grounded && e.ground && e.ground.conv) { e.pos.x += e.ground.conv.x * dt; e.pos.z += e.ground.conv.z * dt; }
+  if (e.grounded && e.ground && e.ground.conv) {
+    e.pos.x += e.ground.conv.x * dt; e.pos.z += e.ground.conv.z * dt;
+    if (e.ground.slide) { e.slideBox = e.ground; e.slideT = 0; }
+  } else if (e.slideBox) {   // tobogã: degraus pequenos para baixo não podem interromper o impulso
+    e.slideT += dt;
+    if (e.vel.y > 0.5 || e.slideT > 0.25) e.slideBox = null;
+    else { e.pos.x += e.slideBox.conv.x * dt; e.pos.z += e.slideBox.conv.z * dt; }
+  }
   if (e.grounded && Math.hypot(e.vel.x, e.vel.z) > 3 && e.stun <= 0) {
     e.stepT -= dt; if (e.stepT <= 0) { e.stepT = 0.375; emit(w, 'step', e); }   // 2 passos por ciclo de corrida de 0,75 s
   }

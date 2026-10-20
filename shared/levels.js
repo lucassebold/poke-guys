@@ -336,6 +336,89 @@ export function makeLevels(data) {
     strip: (cx, y, cz, w, d, t, rx, ry, tint) => A.strip(cx, y, sz(cz), w, d, t, rx, ry, tint),
     conveyorZone: z => A.conveyorZone(z && [sz(z[0]), sz(z[1])]),
   });
-  return [course, moving, hammerAlley, bumperGarden, iceRink, fallingTiles, towers, conveyors, sweeper, skyHop, stairway, finale]
-    .map(l => ({ spawn: defaultSpawn, ...l, time: Math.ceil((l.time || 120) * TK), build: A => l.build(scaleAPI(A)) }));
+
+  // ------------------------------------------------------------------ pistas longas "maratona": trechos variados + tobogãs
+  // tobogã = escada de degraus baixos com esteira rápida (flag slide mantém o impulso); sobe-se por trampolim e desce-se deslizando
+  const mega = (name, env, seed, time, plan) => ({
+    name, env, time, noScale: true,
+    build(A) {
+      const { finishAt } = helpers(A), V = A.vec, R = rng(seed);
+      A.startPlatform('grass');
+      let z = -12, y = 0;
+      const node = (x, zz, yy = y) => A.node(x, zz, yy);
+      const rails = (z0, z1, hw, h = 1.3) => [-1, 1].forEach(sx => A.box(sx * hw - 0.25, sx * hw + 0.25, y - 1, y + h, z0, z1, 'wall7'));
+      const T = {
+        rest(len = 16, th = 'grass') { A.platform(0, y, z - len, z, 16, th); A.checkpoint(0, y, z - len / 2); node(0, z - len / 2); z -= len; },
+        spin(len, n, W = 9, th = 'stone') {
+          A.platform(0, y, z - len, z, W, th);
+          for (let i = 0; i < n; i++) A.spinner(0, y + 0.7, z - (i + 0.7) * len / (n + 0.4), W / 2 - 0.4, (i % 2 ? -1 : 1) * (1.5 + (i % 3) * 0.3));
+          for (let q = 6; q < len; q += 6) node(0, z - q); z -= len;
+        },
+        spin2(len, n, th = 'gold') {   // dois martelos lado a lado
+          A.platform(0, y, z - len, z, 8, th);
+          for (let i = 0; i < n; i++) { const zz = z - (i + 0.7) * len / (n + 0.4), sg = i % 2 ? -1 : 1; A.spinner(-1.7, y + 0.7, zz, 2.3, 2.2 * sg); A.spinner(1.7, y + 0.7, zz, 2.3, -2.2 * sg); }
+          for (let q = 6; q < len; q += 6) node(0, z - q); z -= len;
+        },
+        bump(len, W = 26, th = 'grass') {
+          A.platform(0, y, z - len, z, W, th); rails(z - len, z, W / 2 - 0.25);
+          for (let zz = z - 10; zz > z - len + 6; zz -= 7) for (let k = 0; k < 3; k++) A.bumper(-W / 2 + 2 + (k + R() * 0.8) * ((W - 4) / 3), zz + R() * 3, y);
+          for (let q = 6; q < len; q += 7) node(0, z - q); z -= len;
+        },
+        movers(len, th = 'ice') {
+          A.platform(0, y, z - len, z, 6, th, { ice: th === 'ice' });
+          for (let zz = z - 14, i = 0; zz > z - len + 6; zz -= 16, i++) A.mover({ a: [-4.2, y + 0.6, zz], b: [4.2, y + 0.6, zz], size: [2, 1.2, 1.1], speed: 4.6 + (i % 3) * 0.5, phase: i * 3, theme: 'stone' });
+          for (let q = 6; q < len; q += 6) node(0, z - q); z -= len;
+        },
+        conv(len, spin = 2) {
+          A.platform(0, y, z - len, z, 12, 'metal', { conv: V(0, 0, -4.5) }); A.conveyorZone([z - len, z]);
+          for (let i = 0; i < spin; i++) A.spinner(0, y + 0.7, z - (i + 0.8) * len / (spin + 0.5), 4.8, (i % 2 ? -1 : 1) * 1.5);
+          for (let q = 6; q < len; q += 6) node(0, z - q); z -= len;
+        },
+        tiles(rows, cols = 3) {
+          const S = 3, G = 0.25, P = S + G;
+          for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) A.platform((i - (cols - 1) / 2) * P, y, z - j * P - S, z - j * P, S, (i + j) % 2 ? 'tileA' : 'tileB', { fall: true, pillars: false });
+          for (let j = 0; j < rows; j += 2) node(0, z - j * P - S / 2); z -= rows * P;
+        },
+        hop(n, th = 'stone') {
+          for (let i = 0; i < n; i++) { const x = i % 2 ? 1.0 : -1.0, zz = z - i * 4.8; A.platform(x, y, zz - 3.4, zz, 4.2, th); node(x, zz - 1.7); }
+          z -= n * 4.8 - 1.4; A.platform(0, y, z - 6, z, 10, 'stone'); node(0, z - 3); z -= 6;
+        },
+        up() {   // trampolim para um andar 4 m acima
+          A.trampoline(0, z - 3, z, 5, y, 20); node(0, z - 1.5); z -= 6; y += 4;
+          A.platform(0, y, z - 16, z, 14, 'purple'); A.checkpoint(0, y, z - 8); node(0, z - 8); z -= 16;
+        },
+        slide(steps = 20, extra = {}) {   // 20 degraus de 4 m, desce 0,2 m em cada (4 m no total = altura do trampolim)
+          steps = 20; const L = 4, W = 7, th = extra.th || 'candy', top0 = y;
+          const yy = i => top0 - 0.2 * i;
+          for (let i = 0; i < steps; i++) A.platform(0, yy(i), z - (i + 1) * L, z - i * L, W, i % 2 ? th : 'gold', { conv: V(0, 0, -11), slide: true, pillars: false });
+          for (let i = 0; i < steps; i += 4) { const hh = yy(i), za = z - Math.min(steps, i + 4) * L, zb = z - i * L; A.box(-W / 2 - 0.3, -W / 2 + 0.1, hh - 1.5, hh + 1.3, za, zb, 'wall7'); A.box(W / 2 - 0.1, W / 2 + 0.3, hh - 1.5, hh + 1.3, za, zb, 'wall7'); }
+          for (const k of (extra.bump || [])) A.bumper(R() < 0.5 ? -1.6 : 1.6, z - (k + 0.5) * L, yy(k));
+          for (const k of (extra.spin || [])) A.spinner(0, yy(k) + 0.7, z - (k + 0.5) * L, W / 2 - 0.3, k % 2 ? -1.8 : 1.8);
+          for (let i = 1; i < steps; i += 2) node(0, z - (i + 0.5) * L, yy(i));
+          z -= steps * L; y = yy(steps);
+        },
+        slideout(th = 'grass') { A.platform(0, y, z - 20, z, 16, th); A.checkpoint(0, y, z - 10); node(0, z - 10); z -= 20; },
+      };
+      plan(T);
+      A.platform(0, y, z - 30, z, 16, 'gold'); finishAt(0, y, z - 14, 16); node(0, z - 14); node(0, z - 26);
+    },
+  });
+  const megaSky = mega('Sky Slides', { tint: [1.04, 1.0, 1.1], fog: 0xd8c8ff, sea: 0x6fb8ff, sunColor: 0xfff0d8, sun: [-30, 55, 20] }, 21, 240, T => {
+    T.spin(66, 4); T.rest(); T.up(); T.slide(22, { bump: [6, 12] }); T.slideout();
+    T.bump(70); T.rest(); T.hop(8); T.up(); T.slide(24, { spin: [8, 17], bump: [13] }); T.slideout('sand');
+    T.conv(70, 3); T.rest(); T.spin2(60, 3); T.rest(); T.up(); T.slide(20, { bump: [5, 10, 15] }); T.slideout();
+  });
+  const megaCandy = mega('Candy Chaos', { tint: [1.1, 0.98, 1.06], fog: 0xffd0ec, sea: 0xff9ad8, sunColor: 0xffe0f0, sun: [24, 50, -20] }, 33, 250, T => {
+    T.tiles(8, 4); T.rest(16, 'sand'); T.movers(80, 'candy'); T.rest(); T.up(); T.slide(24, { spin: [7, 15], th: 'purple' }); T.slideout('sand');
+    T.hop(9, 'candy'); T.bump(70, 28, 'sand'); T.rest(); T.spin(60, 4, 10, 'gold'); T.rest(); T.up(); T.slide(22, { bump: [4, 9, 14, 19] }); T.slideout();
+    T.tiles(10, 3); T.rest(); T.conv(60, 3);
+  });
+  const megaIce = mega('Frozen Run', { tint: [0.84, 1.0, 1.14], fog: 0xe0f6ff, sea: 0x7fe6ff, sunColor: 0xe6f2ff, sun: [24, 60, 16] }, 47, 250, T => {
+    T.movers(90, 'ice'); T.rest(16, 'stone'); T.spin(60, 3, 9, 'ice'); T.rest(); T.up(); T.slide(26, { th: 'ice', spin: [9, 18] }); T.slideout('stone');
+    T.hop(8, 'ice'); T.bump(60, 24, 'ice'); T.rest(); T.tiles(8, 3); T.rest(); T.up(); T.slide(24, { th: 'ice', bump: [5, 11, 17] }); T.slideout('stone');
+    T.spin2(66, 3, 'ice'); T.rest(); T.conv(60, 2);
+  });
+  return [course, moving, hammerAlley, bumperGarden, iceRink, fallingTiles, towers, conveyors, sweeper, skyHop, stairway, finale, megaSky, megaCandy, megaIce]
+    .map(l => l.noScale ? { spawn: defaultSpawn, ...l }
+      : { spawn: defaultSpawn, ...l, time: Math.ceil((l.time || 120) * TK), build: A => l.build(scaleAPI(A)) });
 }
