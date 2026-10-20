@@ -247,4 +247,4 @@ wss.on('connection', ws => {
 });
 setInterval(() => { for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); } }, 25000);
 
-server.listen(PORT, '0.0.0.0', () => log(`stumble-like server on http://localhost:${PORT}  (lobby ${LOBBY_SECONDS}s, results ${RESULTS_SECONDS}s)`));
+server.listen(PORT, '0.0.0.0', () => log(`poke-run server on http://localhost:${PORT}  (lobby ${LOBBY_SECONDS}s, results ${RESULTS_SECONDS}s)`));

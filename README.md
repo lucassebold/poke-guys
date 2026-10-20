@@ -1,4 +1,4 @@
-# Stumble-like (multiplayer, só para amigos)
+# Poke Run (multiplayer, só para amigos)
 
 Corrida de obstáculos no navegador, até 16 jogadores por sala. Cada pessoa escolhe um bichinho e clica **PLAY**;
 vagas vazias são preenchidas por bots, e quem entra depois (inclusive com a corrida em andamento) toma o lugar de um bot.

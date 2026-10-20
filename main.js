@@ -1,4 +1,4 @@
-// Stumble-like — cliente do navegador: render (three.js), entrada, áudio, UI e rede.
+// Poke Run — cliente do navegador: render (three.js), entrada, áudio, UI e rede.
 // A física/bots/fases ficam em shared/ (os mesmos arquivos rodam no servidor). Texturas, malhas e sons vêm da instalação local do jogo
 // (assets/, extraídos com UnityPy). Os VALORES numéricos de jogabilidade (CFG em shared/sim.js) são NOSSOS, não extraídos do binário.
 import * as THREE from 'three';
