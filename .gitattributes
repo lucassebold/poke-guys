@@ -1,0 +1,7 @@
+*.png binary
+*.wav binary
+*.obj text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.bat text eol=crlf

@@ -1,0 +1,5 @@
+node_modules/
+evidence/
+tools/
+*.bak
+.env
