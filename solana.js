@@ -13,12 +13,11 @@ const env = k => String(process.env[k] || '').trim().replace(/^["']+|["']+$/g, '
 const NETWORK = (env('SOLANA_NETWORK') || 'devnet').toLowerCase();
 const REAL = NETWORK !== 'devnet';
 if (REAL && env('ALLOW_MAINNET') !== 'yes') throw new Error(`SOLANA_NETWORK=${JSON.stringify(NETWORK)} não é "devnet" e a mainnet (dinheiro real) está bloqueada. Corrija o valor para exatamente: devnet  (ou apague a variável SOLANA_NETWORK).`);
-const RPC = env('SOLANA_RPC_URL') || clusterApiUrl(REAL ? 'mainnet-beta' : 'devnet');
+const RPC = env('SOLANA_RPC_URL') || (REAL ? 'https://solana-rpc.publicnode.com' : clusterApiUrl('devnet'));   // mainnet: RPC gratuito sem cadastro por padrão (troque por Helius/QuickNode se ficar lento)
 const GACHA = env('GACHA_URL') || (REAL ? 'https://gacha.collectorcrypt.com' : 'https://dev-gacha.collectorcrypt.com');
 if (REAL === GACHA.includes('dev-gacha')) throw new Error('Rede e host do Collector Crypt não combinam (devnet <-> dev-gacha)');
 const MINT = new PublicKey(REAL ? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' : 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');   // USDC (devnet: o mesmo que a máquina de teste cobra)
 const DECIMALS = 6, MEMO = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-if (REAL && !env('SOLANA_RPC_URL')) throw new Error('Na mainnet defina SOLANA_RPC_URL com um provedor confiável (ex.: Helius). O RPC público é limitado e instável.');
 if (REAL && /api\.mainnet-beta\.solana\.com/.test(RPC)) throw new Error('O RPC público da Solana não serve para produção. Use um provedor (Helius, QuickNode...).');
 const MAX_PACK_USD = +env('MAX_PACK_USD') || (REAL ? 25 : 100);              // teto de gasto por prêmio
 const MAX_DAILY_USD = +env('MAX_DAILY_PACK_USD') || (REAL ? 50 : 1e9);       // teto de gasto por dia (zera ao reiniciar)
@@ -40,6 +39,15 @@ const houseAta = getAssociatedTokenAddressSync(MINT, house.publicKey);
 const units = usd => BigInt(Math.round(usd * 10 ** DECIMALS));
 const memoIx = text => new TransactionInstruction({ programId: MEMO, keys: [], data: Buffer.from(text, 'utf8') });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function confirmPoll(sig, lastValidBlockHeight) {   // consulta o estado da transação a cada 1 s (não usa WebSocket)
+  for (let i = 0; i < 90; i++) {
+    const st = (await conn.getSignatureStatuses([sig])).value[0];
+    if (st) { if (st.err) throw new Error('Transação falhou: ' + JSON.stringify(st.err)); if (st.confirmationStatus === 'confirmed' || st.confirmationStatus === 'finalized') return; }
+    if (i % 5 === 4 && (await conn.getBlockHeight('confirmed')) > lastValidBlockHeight) throw new Error('blockhash expired');
+    await sleep(1000);
+  }
+  throw new Error('timeout confirmando a transação');
+}
 
 export const info = () => ({ network: NETWORK, real: REAL, rpc: RPC, gacha: GACHA, house: house.publicKey.toBase58(), mint: MINT.toBase58(), maxPackUsd: MAX_PACK_USD, maxDailyUsd: MAX_DAILY_USD, minSol: MIN_SOL });
 export async function houseBalances() {
@@ -66,8 +74,7 @@ export async function submitPayTx(signedB64, expected) {
   const ps = tx.signatures.find(s => s.publicKey.equals(payer));
   if (!ps || !ps.signature || !tx.verifySignatures()) throw new Error('Assinatura do jogador ausente ou inválida');
   const sig = await conn.sendRawTransaction(tx.serialize(), { skipPreflight: false, preflightCommitment: 'confirmed', maxRetries: 3 });
-  const res = await conn.confirmTransaction({ signature: sig, blockhash: expected.blockhash, lastValidBlockHeight: expected.lastValidBlockHeight }, 'confirmed');
-  if (res.value.err) throw new Error('Transação falhou: ' + JSON.stringify(res.value.err));
+  await confirmPoll(sig, expected.lastValidBlockHeight);
   return sig;
 }
 
@@ -80,8 +87,7 @@ export async function refund(toStr, usd, memo) {
     .add(createTransferCheckedInstruction(houseAta, MINT, toAta, house.publicKey, units(usd), DECIMALS)).add(memoIx(memo));
   tx.sign(house);
   const sig = await conn.sendRawTransaction(tx.serialize(), { preflightCommitment: 'confirmed' });
-  const res = await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
-  if (res.value.err) throw new Error('Reembolso falhou: ' + JSON.stringify(res.value.err));
+  await confirmPoll(sig, lastValidBlockHeight);
   return sig;
 }
 

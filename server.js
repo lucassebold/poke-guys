@@ -36,7 +36,8 @@ const PAY_WINDOW = +process.env.PAY_WINDOW || 60;     // tempo para todos pagare
 const PAID_GRACE = 10, PAID_RESULTS = 15, MAX_AVG_SPEED = 26;   // fim da corrida após o 1º, tempo na tela de resultado, teto de velocidade média (antitrapaça)
 const PAYMENT_MODE = String(process.env.PAYMENT_MODE || 'sim').trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
 const PACKS = [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }];
-const shareFor = (pack, n) => Math.ceil(pack.usd * 100 / n) / 100;   // preço do pacote dividido entre os n jogadores (arredonda para cima)
+let FEE_PCT = +process.env.HOUSE_FEE_PCT || 0;   // taxa de serviço (%) somada ao preço do pacote (padrão 5% na mainnet)
+const shareFor = (pack, n) => Math.ceil(pack.usd * (1 + FEE_PCT / 100) * 100 / n) / 100;   // preço do pacote (+ taxa) dividido entre os n jogadores, arredondado para cima
 const payOk = m => PAYMENT_MODE === 'sim' && typeof m.pay === 'string' && m.pay.startsWith('SIM:');   // TODO: verificar pagamento real (Solana)
 const SPECIES = ['Pikachu', 'Charmander', 'Bulbasaur', 'Squirtle', 'Jigglypuff', 'Psyduck', 'Eevee', 'Snorlax', 'Meowth', 'Gengar', 'Togepi', 'Piplup', 'Oddish', 'Cubone', 'Poliwag', 'Eevee 2'];   // mesma ordem de ROSTER em pokemon.js
 const level7 = JSON.parse(fs.readFileSync(path.join(ROOT, 'levels/level7_moving.json'), 'utf8'));
@@ -44,7 +45,7 @@ const LEVELS = makeLevels({ level7 });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 // pagamento real (USDC na Solana) só quando PAYMENT_MODE=solana; padrão: simulado
 let SOL = null;
-if (PAYMENT_MODE === 'solana') { SOL = await import('./solana.js'); const si = await SOL.init(); log(`SOLANA ${si.network} | house ${si.house} | SOL ${si.sol} USDC ${si.usdc} | gacha ${si.gacha}`); }
+if (PAYMENT_MODE === 'solana') { SOL = await import('./solana.js'); const si = await SOL.init(); if (si.real && !process.env.HOUSE_FEE_PCT) FEE_PCT = 5; log(`SOLANA ${si.network} | house ${si.house} | SOL ${si.sol} USDC ${si.usdc} | gacha ${si.gacha} | fee ${FEE_PCT}%`); }
 const PAID_ENABLED = !/^(no|0|false|off)$/i.test(String(process.env.PAID_ENABLED || 'yes').trim());   // interruptor: PAID_ENABLED=no pausa as salas pagas
 const PRIZE_MODE = String(process.env.PRIZE_MODE || 'auto').trim().toLowerCase();                      // auto = compra o pacote; manual = só registra o vencedor (você entrega)
 const MAX_PAID_ROOMS = +process.env.MAX_PAID_ROOMS || 2;
@@ -66,7 +67,7 @@ function serveStatic(req, res) {
   if (rel === '') rel = 'index.html';
   if (rel === 'health') { res.writeHead(200); return res.end('ok'); }
   if (rel === 'favicon.ico') { res.writeHead(204); return res.end(); }
-  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, real: !!(SOL && SOL.info().real), paused: !PAID_ENABLED || !OPERATIONAL, prizeMode: PRIZE_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
+  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, real: !!(SOL && SOL.info().real), fee: FEE_PCT, paused: !PAID_ENABLED || !OPERATIONAL, prizeMode: PRIZE_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
   if (rel.includes('..') || !(PUBLIC_ROOT.has(rel) || PUBLIC_DIRS.some(d => rel.startsWith(d)))) { res.writeHead(404); return res.end('not found'); }
   const file = path.join(ROOT, rel), ext = path.extname(file).toLowerCase();
   fs.stat(file, (err, st) => {
@@ -240,7 +241,7 @@ class Room {
       const m = { t: 'lobby', level: this.levelIndex, left: Math.max(0, this.lobbyLeft), you: c.slot, slots: this.slotsInfo() };
       if (this.paid) {
         const stage = this.phase === 'pay' ? 'pay' : n >= PAID_MIN ? 'lock' : 'wait';
-        m.paid = { stage, mode: PAYMENT_MODE, real: !!(SOL && SOL.info().real), pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
+        m.paid = { stage, mode: PAYMENT_MODE, real: !!(SOL && SOL.info().real), fee: FEE_PCT, pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
         m.left = Math.max(0, stage === 'pay' ? this.payLeft : stage === 'lock' ? this.startLeft : this.waitLeft);
       }
       send(c, m);
