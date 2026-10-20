@@ -61,6 +61,12 @@ kbd{display:inline-block;min-width:24px;padding:1px 6px;margin:0 2px;border-radi
 #home,#results,#menu{background:linear-gradient(160deg,#3b1480ee,#16084aee);border:2px solid #ff8ae255;box-shadow:0 10px 40px #000a,0 0 30px #b86bff55}
 #home h1{background:linear-gradient(90deg,#ffe135,#ff4fa3,#4fe3ff);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:0;filter:drop-shadow(0 3px 0 #1a0d2e) drop-shadow(0 0 14px #ff4fa388)}
 #home button.big{background:linear-gradient(180deg,#5dff7a,#1fc24a);box-shadow:0 5px 0 #0f7a2b,0 0 18px #5dff7a88}
+#picker{gap:8px}
+#picker button.card{padding:0;aspect-ratio:1;border-radius:12px;border:3px solid #ffffff44;overflow:hidden;position:relative;background:radial-gradient(circle at 50% 35%,hsl(var(--h),90%,62%),hsl(var(--h),80%,28%));transition:transform .12s,box-shadow .12s}
+#picker button.card img{width:100%;height:100%;display:block;pointer-events:none}
+#picker button.card:hover{transform:translateY(-3px) scale(1.05);border-color:#fff}
+#picker button.card.sel{border-color:#ffe135;transform:scale(1.1);z-index:2;box-shadow:0 0 0 2px #1a0d2e,0 0 20px #ffe135,0 0 34px #ff4fa3aa}
+#picker button.card:not(.sel){filter:saturate(.75) brightness(.85)}
 </style></head><body>
 <div id="hud"></div><div id="msg"></div><div id="prog"></div><div id="item"></div><div id="toast"></div><div id="flash"></div>
 <div id="menu"></div><div id="spec"></div><div id="specTime"></div><div id="results"></div>

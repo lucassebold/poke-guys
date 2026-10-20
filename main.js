@@ -677,10 +677,30 @@ function setPreview() {
   g.position.set(0, 0.05, -1.5); scene.add(g);
   preview = { g, anim: new Animator(body.userData.rig, pivot, body), yaw: 0.5 };
 }
+let portraits = null;
+function makePortraits() {   // retratos 3D renderizados uma vez (cabeça/corpo de frente), usados como "fotos" na seleção
+  portraits = [];
+  const R = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); R.setSize(160, 160); R.setPixelRatio(1);
+  R.outputColorSpace = THREE.SRGBColorSpace;
+  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x8866aa, 1.5)); const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(2, 3, 4); sc.add(dl);
+  ROSTER.forEach(([key], k) => {
+    const b = buildPokemon(key); addOutline(b); b.rotation.y = 0.35; b.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(b), c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    b.position.sub(c); sc.add(b);
+    const d = Math.max(sz.y, sz.x) * 0.62 / Math.tan(THREE.MathUtils.degToRad(15));
+    cam.position.set(0, sz.y * 0.05, d); cam.lookAt(0, 0, 0); R.render(sc, cam);
+    portraits.push(R.domElement.toDataURL('image/png')); sc.remove(b);
+  });
+  R.dispose();
+}
 function buildPicker() {
   const pk = $('picker'); pk.innerHTML = '';
+  if (!portraits) { try { makePortraits(); } catch (e) { portraits = []; } }
   ROSTER.forEach(([, label], k) => {
-    const b = document.createElement('button'); b.textContent = label; b.className = k === CHOICE.pk ? 'sel' : '';
+    const b = document.createElement('button'); b.className = 'card' + (k === CHOICE.pk ? ' sel' : ''); b.title = '';
+    b.style.setProperty('--h', Math.round((k * 22.5 + 8) % 360));
+    if (portraits[k]) { const im = document.createElement('img'); im.src = portraits[k]; im.draggable = false; b.appendChild(im); }
     b.onclick = () => { CHOICE.pk = k; buildPicker(); setPreview(); play('click', { vol: 0.5 }); };
     pk.appendChild(b);
   });
