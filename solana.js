@@ -9,20 +9,21 @@ import fs from 'node:fs';
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, VersionedTransaction, clusterApiUrl } from '@solana/web3.js';
 import { createTransferCheckedInstruction, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync } from '@solana/spl-token';
 
-const NETWORK = process.env.SOLANA_NETWORK || 'devnet';
+const env = k => String(process.env[k] || '').trim().replace(/^["']+|["']+$/g, '').trim();   // tolera espaços e aspas coladas por engano nas variáveis
+const NETWORK = (env('SOLANA_NETWORK') || 'devnet').toLowerCase();
 const REAL = NETWORK !== 'devnet';
-if (REAL && process.env.ALLOW_MAINNET !== 'yes') throw new Error('Mainnet bloqueada: isso gastaria dinheiro real. Defina ALLOW_MAINNET=yes apenas se tiver certeza.');
-const RPC = process.env.SOLANA_RPC_URL || clusterApiUrl(REAL ? 'mainnet-beta' : 'devnet');
-const GACHA = process.env.GACHA_URL || (REAL ? 'https://gacha.collectorcrypt.com' : 'https://dev-gacha.collectorcrypt.com');
+if (REAL && env('ALLOW_MAINNET') !== 'yes') throw new Error(`SOLANA_NETWORK=${JSON.stringify(NETWORK)} não é "devnet" e a mainnet (dinheiro real) está bloqueada. Corrija o valor para exatamente: devnet  (ou apague a variável SOLANA_NETWORK).`);
+const RPC = env('SOLANA_RPC_URL') || clusterApiUrl(REAL ? 'mainnet-beta' : 'devnet');
+const GACHA = env('GACHA_URL') || (REAL ? 'https://gacha.collectorcrypt.com' : 'https://dev-gacha.collectorcrypt.com');
 if (REAL === GACHA.includes('dev-gacha')) throw new Error('Rede e host do Collector Crypt não combinam (devnet <-> dev-gacha)');
 const MINT = new PublicKey(REAL ? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' : 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');   // USDC (devnet: o mesmo que a máquina de teste cobra)
 const DECIMALS = 6, MEMO = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 const MAX_PACK_USD = +process.env.MAX_PACK_USD || 100;   // teto de gasto por prêmio
-const API_KEY = process.env.GACHA_API_KEY || '';
+const API_KEY = env('GACHA_API_KEY');
 
 function loadKey() {
-  let raw = process.env.HOUSE_SECRET_KEY;
-  if (!raw && process.env.HOUSE_KEY_FILE) raw = fs.readFileSync(process.env.HOUSE_KEY_FILE, 'utf8');
+  let raw = env('HOUSE_SECRET_KEY');
+  if (!raw && env('HOUSE_KEY_FILE')) raw = fs.readFileSync(env('HOUSE_KEY_FILE'), 'utf8');
   if (!raw) throw new Error('Defina HOUSE_SECRET_KEY (JSON com 64 números) ou HOUSE_KEY_FILE');
   let j = JSON.parse(raw); if (!Array.isArray(j)) j = j.house;
   return Keypair.fromSecretKey(Uint8Array.from(j));

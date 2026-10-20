@@ -34,7 +34,7 @@ const PAID_WAIT = +process.env.PAID_WAIT || 90;       // espera por PAID_MIN jog
 const PAID_START = +process.env.PAID_START || 20;     // com PAID_MIN jogadores: tempo para entrarem mais (preço cai) antes de travar
 const PAY_WINDOW = +process.env.PAY_WINDOW || 60;     // tempo para todos pagarem depois de travar
 const PAID_GRACE = 10, PAID_RESULTS = 15, MAX_AVG_SPEED = 26;   // fim da corrida após o 1º, tempo na tela de resultado, teto de velocidade média (antitrapaça)
-const PAYMENT_MODE = process.env.PAYMENT_MODE || 'sim';
+const PAYMENT_MODE = String(process.env.PAYMENT_MODE || 'sim').trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
 const PACKS = [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }];
 const shareFor = (pack, n) => Math.ceil(pack.usd * 100 / n) / 100;   // preço do pacote dividido entre os n jogadores (arredonda para cima)
 const payOk = m => PAYMENT_MODE === 'sim' && typeof m.pay === 'string' && m.pay.startsWith('SIM:');   // TODO: verificar pagamento real (Solana)
