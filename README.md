@@ -67,4 +67,4 @@ Antitrapaça nas salas pagas: orçamento de avanço por segundo, tempo mínimo d
 Só liga com `SOLANA_NETWORK=mainnet-beta` **e** `ALLOW_MAINNET=yes`. O RPC padrão da mainnet é o gratuito `solana-rpc.publicnode.com` (sem cadastro); se ficar lento, defina `SOLANA_RPC_URL` com Helius/QuickNode. O RPC oficial `api.mainnet-beta.solana.com` é recusado.
 Travas: `HOUSE_FEE_PCT` (taxa de serviço somada ao preço do pacote; padrão 5% na mainnet), `MAX_PACK_USD` (padrão 25 na mainnet), `MAX_DAILY_PACK_USD` (padrão 50/dia), `MIN_HOUSE_SOL` (padrão 0.005; abaixo disso as salas pagas pausam), `MAX_PAID_ROOMS` (padrão 2),
 `PAID_ENABLED=no` (interruptor para pausar as salas pagas), `PRIZE_MODE=manual` (só registra o vencedor; você compra/entrega o pacote) ou `auto` (compra e entrega sozinho).
-Na mainnet a tela exige aceite (18+, dinheiro real, carta aleatória). Carteira da casa: precisa de USDC (para reembolsos/pacote) e um pouco de SOL (taxas). Mantenha pouco saldo nela.
+Na tela da sala paga há só um aviso curto de que a carta é aleatória (sem tela de aceite). Carteira da casa: precisa de USDC (para reembolsos/pacote) e um pouco de SOL (taxas). Mantenha pouco saldo nela.

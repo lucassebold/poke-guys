@@ -564,7 +564,7 @@ function closeNet() { if (net) { net.close(); net = null; } snapBuf.length = 0; 
 // ---------- salas pagas (pagamento simulado nesta versão) ----------
 // ---------- carteira Solana (Phantom ou compatível) ----------
 const WALLET = { provider: null, pubkey: null };
-let web3Promise = null, prizeState = null, consentOk = false;
+let web3Promise = null, prizeState = null;
 function ensureWeb3() {   // biblioteca da Solana carregada só quando precisa (modo solana)
   if (window.solanaWeb3) return Promise.resolve(window.solanaWeb3);
   if (!web3Promise) web3Promise = new Promise((res, rej) => {
@@ -612,12 +612,10 @@ function renderPaidBox() {
     + (real ? `<div class="walletRow"><button id="walletBtn" class="${WALLET.pubkey ? 'ok' : ''}">${WALLET.pubkey ? '✓ ' + WALLET.pubkey.slice(0, 4) + '…' + WALLET.pubkey.slice(-4) : 'CONNECT WALLET'}</button><span>${netTxt}</span></div>` : '')
     + `<div class="rules">Joining is free. When at least ${cfg.min} players are in the lobby, it locks and the pack price${cfg.fee ? ` (+ ${cfg.fee}% service fee)` : ''} is <b>split between everyone</b> (more players = cheaper).<br>`
     + (cfg.paused ? '<div class="rules" style="color:#ff9a9a"><b>Prize races are paused right now.</b> Try again later.</div>' : '')
-    + (realMoney ? '<label class="consent"><input type="checkbox" id="consent"> I am 18+ and I understand this uses <b>REAL MONEY</b> (USDC). The prize is a <b>random</b> card and may be worth less than the pack price. I only get my money back if the race is cancelled.</label>' : '')
-    + `Real players only, no bots. First to cross the finish line wins the pack${real ? ' — it is sent straight to the winner\'s wallet. You pay in <b>USDC</b> from your wallet (no SOL needed).' : '. Payments are in <b>TEST mode</b> — no real money.'}</div>`;
+    + `Real players only, no bots. First to cross the finish line wins the pack${real ? ' — it is sent straight to the winner\'s wallet. You pay in <b>USDC</b> from your wallet (no SOL needed). The card is random: it can be worth more or less than the pack price.' : '. Payments are in <b>TEST mode</b> — no real money.'}</div>`;
   box.querySelectorAll('.packs button').forEach(b => b.onclick = () => { paidPack = b.dataset.c; renderPaidBox(); play('click', { vol: 0.5 }); });
-  const wb = $('walletBtn'); if (wb) { wb.onclick = () => connectWallet(); wb.disabled = realMoney && !consentOk; }
-  const cb = $('consent'); if (cb) { cb.checked = consentOk; cb.onchange = () => { consentOk = cb.checked; renderPaidBox(); }; }
-  $('playBtn').disabled = !!cfg.paused || (real && (!WALLET.pubkey || (realMoney && !consentOk)));
+  const wb = $('walletBtn'); if (wb) { wb.onclick = () => connectWallet(); }
+  $('playBtn').disabled = !!cfg.paused || (real && !WALLET.pubkey);
 }
 function showMode() {
   $('mode').style.display = 'block'; homeEl.style.display = 'none'; $('payBox').style.display = 'none'; paidMode = false;
