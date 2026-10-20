@@ -339,12 +339,9 @@ export function makeLevels(data) {
 
   // ------------------------------------------------------------------ pistas longas "maratona": trechos variados + tobogãs
   // tobogã = escada de degraus baixos com esteira rápida (flag slide mantém o impulso); sobe-se por trampolim e desce-se deslizando
-  const mega = (name, env, seed, time, plan) => ({
-    name, env, time, noScale: true,
-    build(A) {
-      const { finishAt } = helpers(A), V = A.vec, R = rng(seed);
-      A.startPlatform('grass');
-      let z = -12, y = 0;
+  const segs = (A, seed, z0, y0) => {
+      const V = A.vec, R = rng(seed);
+      let z = z0, y = y0;
       const node = (x, zz, yy = y) => A.node(x, zz, yy);
       const rails = (z0, z1, hw, h = 1.3) => [-1, 1].forEach(sx => A.box(sx * hw - 0.25, sx * hw + 0.25, y - 1, y + h, z0, z1, 'wall7'));
       const T = {
@@ -399,8 +396,15 @@ export function makeLevels(data) {
         },
         slideout(th = 'grass') { A.platform(0, y, z - 20, z, 16, th); A.checkpoint(0, y, z - 10); node(0, z - 10); z -= 20; },
       };
-      plan(T);
-      A.platform(0, y, z - 30, z, 16, 'gold'); finishAt(0, y, z - 14, 16); node(0, z - 14); node(0, z - 26);
+      return { T, get z() { return z; }, get y() { return y; }, node };
+  };
+  const mega = (name, env, seed, time, plan) => ({
+    name, env, time, noScale: true,
+    build(A) {
+      const { finishAt } = helpers(A);
+      A.startPlatform('grass');
+      const S = segs(A, seed, -12, 0); plan(S.T);
+      const z = S.z, y = S.y; A.platform(0, y, z - 30, z, 16, 'gold'); finishAt(0, y, z - 14, 16); S.node(0, z - 14); S.node(0, z - 26);
     },
   });
   const megaSky = mega('Sky Slides', { tint: [1.04, 1.0, 1.1], fog: 0xd8c8ff, sea: 0x6fb8ff, sunColor: 0xfff0d8, sun: [-30, 55, 20] }, 21, 240, T => {
@@ -418,7 +422,64 @@ export function makeLevels(data) {
     T.hop(8, 'ice'); T.bump(60, 24, 'ice'); T.rest(); T.tiles(8, 3); T.rest(); T.up(); T.slide(24, { th: 'ice', bump: [5, 11, 17] }); T.slideout('stone');
     T.spin2(66, 3, 'ice'); T.rest(); T.conv(60, 2);
   });
+
+  // ------------------------------------------------------------------ fases antigas: esticadas com trechos extras (tobogã, tiles, bumpers...) inseridos em "cortes"
+  // Um corte em z abre um vão na fase; o que estava além dele é empurrado pelo comprimento do trecho novo, e o trecho é construído no vão.
+  const noop = new Proxy({}, { get: () => () => undefined });
+  const stretch = (l, cuts, seed) => {
+    const lens = cuts.map((c, k) => { const S = segs(noop, seed + k, 0, 0); c.plan(S.T); return -S.z; });   // 1º passe: só mede
+    const total = lens.reduce((a, b) => a + b, 0);
+    return { ...l, time: Math.ceil((l.time || 120) * TK + total * 0.35), build(A) {
+      const W = A.world, cutsS = cuts.map((c, k) => ({ zi: c.z, D: lens[k] }));   // z em coordenadas já escaladas, do mais perto ao mais longe (decrescente)
+      const shiftAt = zm => cutsS.reduce((a, c) => a + (c.zi >= zm ? c.D : 0), 0);
+      const sh = z => z - shiftAt(z);
+      const place = (z0, z1, mk) => {   // divide o trecho em cada corte que ele atravessa; cada pedaço é deslocado pelo vão anterior
+        const edges = [z1, ...cutsS.map(c => c.zi).filter(zi => zi < z1 && zi > z0), z0]; let ret;
+        for (let i = 0; i < edges.length - 1; i++) { const hi = edges[i], lo = edges[i + 1], sft = shiftAt((lo + hi) / 2); ret = mk(lo - sft, hi - sft); }
+        return ret;
+      };
+      const G = {
+        ...A,
+        platform: (cx, topY, z0, z1, w, th, ex) => place(z0, z1, (a, b) => A.platform(cx, topY, a, b, w, th, ex)),
+        box: (x0, x1, y0, y1, z0, z1, th, ex) => place(z0, z1, (a, b) => A.box(x0, x1, y0, y1, a, b, th, ex)),
+        mover: o => A.mover({ ...o, a: [o.a[0], o.a[1], sh(o.a[2])], b: [o.b[0], o.b[1], sh(o.b[2])] }),
+        spinner: (cx, cy, cz, L, sp) => A.spinner(cx, cy, sh(cz), L, sp),
+        bumper: (x, z, y) => A.bumper(x, sh(z), y),
+        trampoline: (cx, z0, z1, w, y, b2) => A.trampoline(cx, sh(z0), sh(z1), w, y, b2),
+        checkpoint: (x, y, z, w, d, ry) => A.checkpoint(x, y, sh(z), w, d, ry),
+        finish: (x, y, z, w) => A.finish(x, y, sh(z), w),
+        node: (x, z, y) => A.node(x, sh(z), y),
+        strip: (cx, y, cz, w, d, t, rx, ry, tint) => A.strip(cx, y, sh(cz), w, d, t, rx, ry, tint),
+        conveyorZone: z => A.conveyorZone(z && [sh(z[0]), sh(z[1])]),
+      };
+      // 1) fase original (coordenadas escaladas, depois deslocadas)
+      l.build(scaleAPI(G));
+      // 2) trechos novos nos vãos; nós de IA e checkpoints entram na ordem certa depois
+      const gapNodes = [];
+      const Ag = { ...A, node: (x, z, y) => gapNodes.push({ x, z, y }), conveyorZone() {} };
+      let before = 0;
+      cuts.forEach((c, k) => {
+        const z0 = c.z - before; before += lens[k];
+        const S = segs(Ag, seed + k, z0, c.y || 0); c.plan(S.T);
+      });
+      for (const n of gapNodes) { const idx = W.nodes.findIndex(q => q.z < n.z - 0.01 && q.z < n.z); W.nodes.splice(idx < 0 ? W.nodes.length : idx, 0, n); }
+      W.checkpoints.sort((p, q) => q.z - p.z);
+    } };
+  };
+  // cortes (z já escalado, do mais perto ao mais longe; y = altura do piso no corte). Moving, Towers e Sky Hop ficam como estão.
+  const CUTS = {
+    0: [{ z: -73, plan: T => { T.hop(6); T.spin(40, 3); T.rest(); } }, { z: -150, plan: T => { T.up(); T.slide(); T.slideout(); T.movers(50, 'stone'); T.rest(); } }],
+    2: [{ z: -70, plan: T => { T.bump(50, 24); T.rest(); T.up(); T.slide(); T.slideout(); } }, { z: -183, plan: T => { T.tiles(7, 3); T.rest(); T.spin2(40, 2); } }],
+    3: [{ z: -139, plan: T => { T.spin2(50, 2); T.rest(); T.up(); T.slide(); T.slideout(); } }, { z: -276, plan: T => { T.tiles(6, 3); T.rest(); T.hop(6); } }],
+    4: [{ z: -110, plan: T => { T.up(); T.slide(20, { th: 'ice' }); T.slideout('stone'); T.spin(40, 2, 9, 'ice'); } }, { z: -261, plan: T => { T.bump(40, 22, 'ice'); T.rest(); T.hop(6, 'ice'); } }],
+    5: [{ z: -167, plan: T => { T.up(); T.slide(); T.slideout(); T.spin(50, 3); } }, { z: -277, plan: T => { T.movers(60, 'sand'); T.rest(); T.bump(40); } }],
+    7: [{ z: -129, plan: T => { T.hop(7, 'metal'); T.rest(); T.up(); T.slide(); T.slideout(); T.bump(40); } }, { z: -203, plan: T => { T.tiles(6, 3); T.rest(); T.spin2(40, 2); } }],
+    8: [{ z: -93, plan: T => { T.tiles(6, 3); T.rest(); T.up(); T.slide(); T.slideout(); } }, { z: -203, plan: T => { T.bump(40); T.rest(); T.spin(40, 3); } }],
+    10: [{ z: -55, y: 4.75, plan: T => { T.spin2(40, 2); T.rest(); T.bump(40, 20); } }],
+    11: [{ z: -174, y: 6, plan: T => { T.tiles(6, 3); T.rest(); T.movers(50); } }, { z: -341, y: 6, plan: T => { T.spin(40, 3); T.rest(); T.bump(40); } }],
+  };
   return [course, moving, hammerAlley, bumperGarden, iceRink, fallingTiles, towers, conveyors, sweeper, skyHop, stairway, finale, megaSky, megaCandy, megaIce]
-    .map(l => l.noScale ? { spawn: defaultSpawn, ...l }
+    .map((l, idx) => l.noScale ? { spawn: defaultSpawn, ...l }
+      : CUTS[idx] ? stretch({ spawn: defaultSpawn, ...l }, CUTS[idx], 100 + idx * 10)
       : { spawn: defaultSpawn, ...l, time: Math.ceil((l.time || 120) * TK), build: A => l.build(scaleAPI(A)) });
 }

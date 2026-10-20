@@ -77,8 +77,8 @@ class Room {
     log(`room ${this.id} created (${LEVELS[this.levelIndex].name})`);
   }
   pickLevel() {
-    // online: fora as fases curtas (treino, Moving, Trampoline Towers, Conveyor Chaos); as maratonas (índice >= 12) valem em dobro
-    const SHORT = [0, 1, 6, 7];
+    // online: fora as fases curtas que não foram esticadas (Moving, Trampoline Towers, Sky Hop); as maratonas (índice >= 12) valem em dobro
+    const SHORT = [1, 6, 9];
     const opts = LEVELS.flatMap((_, i) => SHORT.includes(i) ? [] : i >= 12 ? [i, i] : [i]).filter(i => !this.recent.includes(i));
     const i = opts[rand(opts.length)]; this.recent.push(i); if (this.recent.length > 5) this.recent.shift(); return i;
   }
