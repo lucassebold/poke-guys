@@ -18,7 +18,13 @@ const GACHA = env('GACHA_URL') || (REAL ? 'https://gacha.collectorcrypt.com' : '
 if (REAL === GACHA.includes('dev-gacha')) throw new Error('Rede e host do Collector Crypt não combinam (devnet <-> dev-gacha)');
 const MINT = new PublicKey(REAL ? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' : 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');   // USDC (devnet: o mesmo que a máquina de teste cobra)
 const DECIMALS = 6, MEMO = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-const MAX_PACK_USD = +process.env.MAX_PACK_USD || 100;   // teto de gasto por prêmio
+if (REAL && !env('SOLANA_RPC_URL')) throw new Error('Na mainnet defina SOLANA_RPC_URL com um provedor confiável (ex.: Helius). O RPC público é limitado e instável.');
+if (REAL && /api\.mainnet-beta\.solana\.com/.test(RPC)) throw new Error('O RPC público da Solana não serve para produção. Use um provedor (Helius, QuickNode...).');
+const MAX_PACK_USD = +env('MAX_PACK_USD') || (REAL ? 25 : 100);              // teto de gasto por prêmio
+const MAX_DAILY_USD = +env('MAX_DAILY_PACK_USD') || (REAL ? 50 : 1e9);       // teto de gasto por dia (zera ao reiniciar)
+const MIN_SOL = +env('MIN_HOUSE_SOL') || (REAL ? 0.005 : 0.0005);            // SOL mínimo na casa para pagar taxas de rede
+let spentDay = 0, dayKey = '';
+const dayCheck = usd => { const k = new Date().toISOString().slice(0, 10); if (k !== dayKey) { dayKey = k; spentDay = 0; } if (spentDay + usd > MAX_DAILY_USD) throw new Error(`Limite diário de compra de pacotes atingido (${spentDay}+${usd} > ${MAX_DAILY_USD})`); };
 const API_KEY = env('GACHA_API_KEY');
 
 function loadKey() {
@@ -35,7 +41,7 @@ const units = usd => BigInt(Math.round(usd * 10 ** DECIMALS));
 const memoIx = text => new TransactionInstruction({ programId: MEMO, keys: [], data: Buffer.from(text, 'utf8') });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export const info = () => ({ network: NETWORK, rpc: RPC, gacha: GACHA, house: house.publicKey.toBase58(), mint: MINT.toBase58(), maxPackUsd: MAX_PACK_USD });
+export const info = () => ({ network: NETWORK, real: REAL, rpc: RPC, gacha: GACHA, house: house.publicKey.toBase58(), mint: MINT.toBase58(), maxPackUsd: MAX_PACK_USD, maxDailyUsd: MAX_DAILY_USD, minSol: MIN_SOL });
 export async function houseBalances() {
   const sol = await conn.getBalance(house.publicKey);
   let usdc = 0; try { usdc = Number((await conn.getTokenAccountBalance(houseAta)).value.uiAmount || 0); } catch { /* conta ainda não existe */ }
@@ -88,6 +94,7 @@ const gacha = async (path, body) => {
 const ownerOfCoreAsset = async addr => { const a = await conn.getAccountInfo(new PublicKey(addr)); return a ? new PublicKey(a.data.subarray(1, 33)).toBase58() : null; };   // Metaplex Core: [key:1][owner:32]
 export async function buyPack(packCode, usdPrice, winnerStr) {
   if (usdPrice > MAX_PACK_USD) throw new Error(`Pacote de US$${usdPrice} acima do teto MAX_PACK_USD=${MAX_PACK_USD}`);
+  dayCheck(usdPrice);
   new PublicKey(winnerStr);
   const bal = await houseBalances(); if (bal.usdc < usdPrice) throw new Error(`Saldo USDC da casa insuficiente (${bal.usdc} < ${usdPrice})`);
   const gen = await gacha('/api/generatePack', { playerAddress: house.publicKey.toBase58(), packType: packCode, altPlayerAddress: winnerStr });
@@ -105,6 +112,7 @@ export async function buyPack(packCode, usdPrice, winnerStr) {
   const o = open?.body; if (!o?.nft_address) throw new Error('openPack não confirmou a tempo (memo ' + gen.body.memo + ')');
   await sleep(1500);
   let owner = null; try { owner = await ownerOfCoreAsset(o.nft_address); } catch { /* só para log */ }
+  spentDay += usdPrice;
   const f = o.nftWon?.content?.files?.[0];
   return { memo: gen.body.memo, nft: o.nft_address, name: o.nftWon?.content?.metadata?.name || 'Card', rarity: o.rarity, insured: o.insuredValue, image: f?.cdn_uri || f?.uri || null, owner, delivered: owner === winnerStr };
 }

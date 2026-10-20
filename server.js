@@ -45,6 +45,14 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 // pagamento real (USDC na Solana) só quando PAYMENT_MODE=solana; padrão: simulado
 let SOL = null;
 if (PAYMENT_MODE === 'solana') { SOL = await import('./solana.js'); const si = await SOL.init(); log(`SOLANA ${si.network} | house ${si.house} | SOL ${si.sol} USDC ${si.usdc} | gacha ${si.gacha}`); }
+const PAID_ENABLED = !/^(no|0|false|off)$/i.test(String(process.env.PAID_ENABLED || 'yes').trim());   // interruptor: PAID_ENABLED=no pausa as salas pagas
+const PRIZE_MODE = String(process.env.PRIZE_MODE || 'auto').trim().toLowerCase();                      // auto = compra o pacote; manual = só registra o vencedor (você entrega)
+const MAX_PAID_ROOMS = +process.env.MAX_PAID_ROOMS || 2;
+let OPERATIONAL = true;                                                                               // false = SOL da casa baixo demais para pagar taxas
+if (SOL) {
+  const chk = async () => { try { const b = await SOL.houseBalances(), ok = b.sol >= SOL.info().minSol; if (ok !== OPERATIONAL) log(ok ? 'casa abastecida: salas pagas liberadas' : `ALERTA: SOL da casa baixo (${b.sol}) - salas pagas PAUSADAS`); OPERATIONAL = ok; } catch (e) { log('balance check failed:', e.message); } };
+  await chk(); setInterval(chk, 30000);
+}
 const friendlyErr = e => { const m = String(e && e.message || e); return /insufficient|0x1\b/i.test(m) ? 'Not enough USDC in your wallet' : /AccountNotFound|could not find account|InvalidAccountData|0xbc4/i.test(m) ? 'Your wallet has no USDC account yet' : /blockhash|expired/i.test(m) ? 'The payment expired, try again' : m.slice(0, 120); };
 
 // ------------------------------------------------------------------ arquivos estáticos
@@ -58,7 +66,7 @@ function serveStatic(req, res) {
   if (rel === '') rel = 'index.html';
   if (rel === 'health') { res.writeHead(200); return res.end('ok'); }
   if (rel === 'favicon.ico') { res.writeHead(204); return res.end(); }
-  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
+  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, real: !!(SOL && SOL.info().real), paused: !PAID_ENABLED || !OPERATIONAL, prizeMode: PRIZE_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
   if (rel.includes('..') || !(PUBLIC_ROOT.has(rel) || PUBLIC_DIRS.some(d => rel.startsWith(d)))) { res.writeHead(404); return res.end('not found'); }
   const file = path.join(ROOT, rel), ext = path.extname(file).toLowerCase();
   fs.stat(file, (err, st) => {
@@ -202,6 +210,7 @@ class Room {
   }
   awardPrize() {
     const w = this.winner, pack = this.pack;
+    if (PRIZE_MODE === 'manual' && w) { log(`PRIZE MANUAL room ${this.id}: winner ${w.name} wallet ${w.wallet || '-'} pack ${pack.code} $${pack.usd} - ENTREGAR`); this.broadcast({ t: 'prize', status: 'manual', winner: w.i }); return; }
     if (PAYMENT_MODE !== 'solana' || !w || !w.wallet) { log(`PRIZE room ${this.id}: manual delivery needed (${PAYMENT_MODE}) winner ${w && w.name} pack ${pack.code}`); return; }
     this.prizePending = true; this.broadcast({ t: 'prize', status: 'buying', pack, winner: w.i });
     log(`PRIZE room ${this.id}: buying ${pack.code} for ${w.name} ${w.wallet}`);
@@ -231,7 +240,7 @@ class Room {
       const m = { t: 'lobby', level: this.levelIndex, left: Math.max(0, this.lobbyLeft), you: c.slot, slots: this.slotsInfo() };
       if (this.paid) {
         const stage = this.phase === 'pay' ? 'pay' : n >= PAID_MIN ? 'lock' : 'wait';
-        m.paid = { stage, mode: PAYMENT_MODE, pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
+        m.paid = { stage, mode: PAYMENT_MODE, real: !!(SOL && SOL.info().real), pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
         m.left = Math.max(0, stage === 'pay' ? this.payLeft : stage === 'lock' ? this.startLeft : this.waitLeft);
       }
       send(c, m);
@@ -388,7 +397,7 @@ function findPaidRoom(pack) {
   let best = null;
   for (const rm of rooms.values()) if (rm.paid && rm.pack.code === pack.code && rm.phase === 'lobby' && rm.humans() < SLOTS && (!best || rm.humans() > best.humans())) best = rm;
   if (best) return best;
-  if (rooms.size >= MAX_ROOMS) return null;
+  if (rooms.size >= MAX_ROOMS || [...rooms.values()].filter(r => r.paid).length >= MAX_PAID_ROOMS) return null;
   const rm = new Room(pack); rooms.set(rm.id, rm); return rm;
 }
 
@@ -406,6 +415,7 @@ wss.on('connection', ws => {
     if (m.t === 'join' && !c.room) {
       c.name = cleanName(m.name); c.pk = Math.max(0, Math.min(SPECIES.length - 1, m.pk | 0));
       const pack = m.paid ? (PACKS.find(p => p.code === m.pack) || PACKS[0]) : null;
+      if (pack && (!PAID_ENABLED || !OPERATIONAL)) { send(c, { t: 'paidoff' }); ws.close(); return; }
       const room = pack ? findPaidRoom(pack) : findRoom();
       if (!room || !room.addHuman(c)) { send(c, { t: 'full' }); ws.close(); }
     } else if (m.t === 's' && c.room) c.room.onState(c, m.p);

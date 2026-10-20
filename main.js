@@ -468,6 +468,7 @@ function renderPrize() {   // carta ganha (modo solana): comprando -> entregue /
   const el = $('prizeInfo'), p = prizeState; if (!el || !p) return;
   const you = player ? String(player.i) : '', mine = resultsEl.dataset.winner === you;
   if (p.status === 'buying') el.innerHTML = '<div class="prize">Buying the prize pack… ⏳</div>';
+  else if (p.status === 'manual') el.innerHTML = '<div class="prize">The host will deliver your prize pack to your wallet soon. 📦</div>';
   else if (p.status === 'done') el.innerHTML = `<div class="prize done">${p.image ? `<img src="${esc(p.image)}" alt="card">` : ''}<b>${esc(p.name)}</b><span>${esc(p.rarity || '')}${p.insured ? ' · insured value $' + p.insured : ''}</span><small>${mine ? 'Sent to YOUR wallet!' : "Sent to the winner's wallet"}</small></div>`;
   else el.innerHTML = '<div class="prize">Prize delivery failed — the host will deliver it manually.</div>';
 }
@@ -563,7 +564,7 @@ function closeNet() { if (net) { net.close(); net = null; } snapBuf.length = 0; 
 // ---------- salas pagas (pagamento simulado nesta versão) ----------
 // ---------- carteira Solana (Phantom ou compatível) ----------
 const WALLET = { provider: null, pubkey: null };
-let web3Promise = null, prizeState = null;
+let web3Promise = null, prizeState = null, consentOk = false;
 function ensureWeb3() {   // biblioteca da Solana carregada só quando precisa (modo solana)
   if (window.solanaWeb3) return Promise.resolve(window.solanaWeb3);
   if (!web3Promise) web3Promise = new Promise((res, rej) => {
@@ -604,16 +605,19 @@ fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; if (paidMode)
 const usd = v => '$' + (+v).toFixed(2);
 function packByCode(c) { return ((paidCfg || PAID_DEFAULT).packs.find(p => p.code === c)) || (paidCfg || PAID_DEFAULT).packs[0]; }
 function renderPaidBox() {
-  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT, real = cfg.mode === 'solana';
+  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT, real = cfg.mode === 'solana', realMoney = real && cfg.network !== 'devnet';
   box.style.display = paidMode ? 'block' : 'none'; if (!paidMode) return;
   const netTxt = cfg.network === 'devnet' ? 'Solana <b>DEVNET</b> (test network — fake money, no real cost)' : 'Solana (real money!)';
   box.innerHTML = `<div><b>Pick the prize pack</b></div><div class="packs">${cfg.packs.map(p => `<button data-c="${p.code}" class="${p.code === paidPack ? 'sel' : ''}">${esc(p.label)} · ${usd(p.usd)}</button>`).join('')}</div>`
     + (real ? `<div class="walletRow"><button id="walletBtn" class="${WALLET.pubkey ? 'ok' : ''}">${WALLET.pubkey ? '✓ ' + WALLET.pubkey.slice(0, 4) + '…' + WALLET.pubkey.slice(-4) : 'CONNECT WALLET'}</button><span>${netTxt}</span></div>` : '')
     + `<div class="rules">Joining is free. When at least ${cfg.min} players are in the lobby, it locks and the pack price is <b>split between everyone</b> (more players = cheaper).<br>`
+    + (cfg.paused ? '<div class="rules" style="color:#ff9a9a"><b>Prize races are paused right now.</b> Try again later.</div>' : '')
+    + (realMoney ? '<label class="consent"><input type="checkbox" id="consent"> I am 18+ and I understand this uses <b>REAL MONEY</b> (USDC). The prize is a <b>random</b> card and may be worth less than the pack price. I only get my money back if the race is cancelled.</label>' : '')
     + `Real players only, no bots. First to cross the finish line wins the pack${real ? ' — it is sent straight to the winner\'s wallet. You pay in <b>USDC</b> from your wallet (no SOL needed).' : '. Payments are in <b>TEST mode</b> — no real money.'}</div>`;
   box.querySelectorAll('.packs button').forEach(b => b.onclick = () => { paidPack = b.dataset.c; renderPaidBox(); play('click', { vol: 0.5 }); });
-  const wb = $('walletBtn'); if (wb) wb.onclick = () => connectWallet();
-  $('playBtn').disabled = real && !WALLET.pubkey;
+  const wb = $('walletBtn'); if (wb) { wb.onclick = () => connectWallet(); wb.disabled = realMoney && !consentOk; }
+  const cb = $('consent'); if (cb) { cb.checked = consentOk; cb.onchange = () => { consentOk = cb.checked; renderPaidBox(); }; }
+  $('playBtn').disabled = !!cfg.paused || (real && (!WALLET.pubkey || (realMoney && !consentOk)));
 }
 function showMode() {
   $('mode').style.display = 'block'; homeEl.style.display = 'none'; $('payBox').style.display = 'none'; paidMode = false;
@@ -631,7 +635,7 @@ function showPayBox(p) {
   if (key !== payKey || box.style.display !== 'block') {   // só reconstrói quando algo mudou (senão o clique no botão se perde)
     payKey = key; const real = p.mode === 'solana';
     if (p.youPaid) box.innerHTML = `<h2>Payment received ✓</h2><div class="big">${p.paidCount}/${p.n}</div><div class="row">Waiting for the other players to pay…</div><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div>`;
-    else box.innerHTML = `<h2>Lobby locked — ${p.n} players</h2><div class="row">Prize: <b>${esc(p.pack.label)}</b> (${usd(p.pack.usd)})</div><div class="row">Split ${p.n} ways — your share:</div><div class="big">${usd(p.share)}${real ? ' <small style="font-size:20px">USDC</small>' : ''}</div><button id="payNow">PAY ${usd(p.share)}</button><div class="row" id="payMsg"></div><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div><div class="test">${real ? 'TEST NETWORK (devnet) — fake money, no real cost' : 'TEST MODE — no real money is charged'}</div>`;
+    else box.innerHTML = `<h2>Lobby locked — ${p.n} players</h2><div class="row">Prize: <b>${esc(p.pack.label)}</b> (${usd(p.pack.usd)})</div><div class="row">Split ${p.n} ways — your share:</div><div class="big">${usd(p.share)}${real ? ' <small style="font-size:20px">USDC</small>' : ''}</div><button id="payNow">PAY ${usd(p.share)}</button><div class="row" id="payMsg"></div><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div><div class="test">${real ? (p.real ? '<b style="color:#ffb74d">REAL MONEY — you are paying real USDC</b>' : 'TEST NETWORK (devnet) — fake money, no real cost') : 'TEST MODE — no real money is charged'}</div>`;
     box.style.display = 'block';
     const b = $('payNow'); if (b) b.onclick = () => {
       play('click', { vol: 0.6 }); b.disabled = true;
@@ -682,6 +686,8 @@ function onNetMsg(m) {
     startAmbient(); if (m.phase === 'countdown') play('count', { vol: 0.9 });
   } else if (m.t === 'paytx') {
     setPayMsg('Approve the payment in your wallet…'); signAndReturn(m.tx);
+  } else if (m.t === 'paidoff') {
+    closeNet(); msg.innerHTML = 'Prize races are paused<small>try again later — returning to the main screen…</small>'; setTimeout(goHome, 3000);
   } else if (m.t === 'payfail') {
     setPayError(m.reason || 'Payment failed');
   } else if (m.t === 'prize') {

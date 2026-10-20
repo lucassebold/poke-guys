@@ -62,3 +62,9 @@ Antitrapaça nas salas pagas: orçamento de avanço por segundo, tempo mínimo d
 - A casa precisa de **USDC de teste** (mint `Gh9Zw…tKJr`, torneira: spl-token-faucet.com) e de um pouco de **SOL de teste** (faucet.solana.com).
 - **Mainnet (dinheiro real) está BLOQUEADA**: só liga com `SOLANA_NETWORK=mainnet-beta` **e** `ALLOW_MAINNET=yes`. Não use sem checar a parte legal.
 - Logs (Railway): `PAY`, `REFUND`, `REFUND FAILED` (devolver manualmente!), `PRIZE OK`, `PRIZE FAILED` (entregar manualmente!), `SUSPECT`.
+
+### Dinheiro real (mainnet) — checklist e travas
+Só liga com `SOLANA_NETWORK=mainnet-beta` **e** `ALLOW_MAINNET=yes` **e** `SOLANA_RPC_URL` de um provedor (Helius/QuickNode; o RPC público é recusado).
+Travas: `MAX_PACK_USD` (padrão 25 na mainnet), `MAX_DAILY_PACK_USD` (padrão 50/dia), `MIN_HOUSE_SOL` (padrão 0.005; abaixo disso as salas pagas pausam), `MAX_PAID_ROOMS` (padrão 2),
+`PAID_ENABLED=no` (interruptor para pausar as salas pagas), `PRIZE_MODE=manual` (só registra o vencedor; você compra/entrega o pacote) ou `auto` (compra e entrega sozinho).
+Na mainnet a tela exige aceite (18+, dinheiro real, carta aleatória). Carteira da casa: precisa de USDC (para reembolsos/pacote) e um pouco de SOL (taxas). Mantenha pouco saldo nela.
