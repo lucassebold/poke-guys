@@ -5,8 +5,12 @@
 //  - o servidor roda os BOTS (mesma física de shared/sim.js), o relógio da rodada, os pisos que caem e a ordem de chegada;
 //  - a cada ~50 ms o servidor manda um "snap" com todos os corredores; os navegadores interpolam.
 //
-// Cliente -> servidor:  {t:'join', name, pk} · {t:'s', p:[x,y,z,yaw,vx,vy,vz,flags]} · {t:'fin'} · {t:'ping'}
-// Servidor -> cliente:  lobby · round · slot · snap · fin · end · full · pong
+// Cliente -> servidor:  {t:'join', name, pk[, paid, pack]} · {t:'s', p:[x,y,z,yaw,vx,vy,vz,flags]} · {t:'fin'} · {t:'use'} · {t:'pay', pay} · {t:'ping'}
+// Servidor -> cliente:  lobby · round · slot · gone · snap · fin · end · full · refund · kicked · cancel · closed · pong
+//
+// Salas PAGAS (valendo prêmio): entrar é grátis; com >= PAID_MIN jogadores o lobby trava, o preço do pacote é dividido entre todos (fase 'pay');
+// quando todos pagam, a corrida começa SEM bots; o 1º a cruzar a linha leva o pacote. Se alguém não pagar a tempo (ou sair), os pagamentos são
+// devolvidos e o lobby reabre sem essa pessoa (o preço muda porque muda a divisão). Nesta versão o pagamento é SIMULADO (PAYMENT_MODE=sim).
 // flags: 1 no chão · 2 mergulhando · 4 atordoado · 8 vitória · 16 terminou · 32 classificado · 64 eliminado
 import http from 'node:http';
 import fs from 'node:fs';
@@ -25,6 +29,15 @@ const LOBBY_SECONDS = +process.env.LOBBY_SECONDS || 10;
 const RESULTS_SECONDS = +process.env.RESULTS_SECONDS || 9;
 const MAX_ROOMS = +process.env.MAX_ROOMS || 30;
 const SLOTS = CFG.racers;                       // 16
+const PAID_MIN = +process.env.PAID_MIN || 2;          // mínimo de jogadores reais na sala paga
+const PAID_WAIT = +process.env.PAID_WAIT || 90;       // espera por PAID_MIN jogadores antes de cancelar a sala
+const PAID_START = +process.env.PAID_START || 20;     // com PAID_MIN jogadores: tempo para entrarem mais (preço cai) antes de travar
+const PAY_WINDOW = +process.env.PAY_WINDOW || 60;     // tempo para todos pagarem depois de travar
+const PAID_GRACE = 10, PAID_RESULTS = 15, MAX_AVG_SPEED = 26;   // fim da corrida após o 1º, tempo na tela de resultado, teto de velocidade média (antitrapaça)
+const PAYMENT_MODE = process.env.PAYMENT_MODE || 'sim';
+const PACKS = [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }];
+const shareFor = (pack, n) => Math.ceil(pack.usd * 100 / n) / 100;   // preço do pacote dividido entre os n jogadores (arredonda para cima)
+const payOk = m => PAYMENT_MODE === 'sim' && typeof m.pay === 'string' && m.pay.startsWith('SIM:');   // TODO: verificar pagamento real (Solana)
 const SPECIES = ['Pikachu', 'Charmander', 'Bulbasaur', 'Squirtle', 'Jigglypuff', 'Psyduck', 'Eevee', 'Snorlax', 'Meowth', 'Gengar', 'Togepi', 'Piplup', 'Oddish', 'Cubone', 'Poliwag', 'Eevee 2'];   // mesma ordem de ROSTER em pokemon.js
 const level7 = JSON.parse(fs.readFileSync(path.join(ROOT, 'levels/level7_moving.json'), 'utf8'));
 const LEVELS = makeLevels({ level7 });
@@ -41,6 +54,7 @@ function serveStatic(req, res) {
   if (rel === '') rel = 'index.html';
   if (rel === 'health') { res.writeHead(200); return res.end('ok'); }
   if (rel === 'favicon.ico') { res.writeHead(204); return res.end(); }
+  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
   if (rel.includes('..') || !(PUBLIC_ROOT.has(rel) || PUBLIC_DIRS.some(d => rel.startsWith(d)))) { res.writeHead(404); return res.end('not found'); }
   const file = path.join(ROOT, rel), ext = path.extname(file).toLowerCase();
   fs.stat(file, (err, st) => {
@@ -66,15 +80,16 @@ const r2 = v => Math.round(v * 100) / 100;
 const rand = n => Math.floor(Math.random() * n);
 
 class Room {
-  constructor() {
+  constructor(pack = null) {
+    this.pack = pack; this.paid = !!pack; this.waitLeft = PAID_WAIT; this.startLeft = PAID_START; this.payLeft = 0; this.share = 0; this.winner = null; this.dead = false;
     this.id = ++roomSeq; this.slots = Array(SLOTS).fill(null); this.clients = new Set();
     this.recent = []; this.levelIndex = this.pickLevel(); this.phase = 'lobby'; this.lobbyLeft = LOBBY_SECONDS; this.sendAcc = 0;
     this.finishedCount = 0; this.endTimer = 0; this.raceT = 0; this.leftT = 0; this.cd = 0; this.nextLevel = null; this.resultsLeft = 0;
     this.evq = []; this.ibKey = ''; this.trKey = '';
-    this.hooks = { apply: (r, fx) => { if (r.human) send(r.human, { t: 'fx', fx }); applyFx(r, fx); }, ev: e => this.evq.push(e) };
+    this.hooks = { apply: (r, fx) => { if (r.human) send(r.human, { t: 'fx', fx }); if (fx.kind === 'tp') r.adv = (r.adv ?? 0) + 45; applyFx(r, fx); }, ev: e => this.evq.push(e) };
     this.buildWorld(); this.last = Date.now(); this.tickN = 0; this.deadKey = '';
     this.timer = setInterval(() => this.tick(), 1000 / 60);
-    log(`room ${this.id} created (${LEVELS[this.levelIndex].name})`);
+    log(`room ${this.id} created (${LEVELS[this.levelIndex].name})${this.paid ? ' PAID ' + this.pack.code : ''}`);
   }
   pickLevel() {
     // online: fora as fases curtas que não foram esticadas (Moving, Trampoline Towers, Sky Hop); as maratonas (índice >= 12) valem em dobro
@@ -113,19 +128,71 @@ class Room {
     const r = this.slots[c.slot]; this.clients.delete(c);
     if (r && r.human === c) {
       r.human = null;
-      if (this.phase === 'lobby') this.slots[c.slot] = null;
+      if (this.phase === 'lobby' || this.phase === 'pay') this.slots[c.slot] = null;
+      else if (this.paid) { this.slots[c.slot] = null; this.broadcast({ t: 'gone', i: c.slot }); log(`room ${this.id}: ${c.name} left the paid race (forfeit)`); }
       else { r.name = SPECIES[r.pk % SPECIES.length]; r.node = nearestNodeAhead(this.world, r); r.vel.x = r.vel.z = 0; this.broadcast({ t: 'slot', i: r.i, name: r.name, pk: r.pk, bot: true }); }
     }
     log(`room ${this.id}: ${c.name} left (${this.humans()} humans)`);
-    if (this.humans() === 0) this.destroy(); else if (this.phase === 'lobby') this.sendLobby();
+    if (this.humans() === 0) this.destroy();
+    else if (this.paid && this.phase === 'pay') this.relock(`${c.name} left`);
+    else if (this.phase === 'lobby') this.sendLobby();
+    else if (this.paid && this.phase === 'race' && this.winner && this.slots.every(x => !x || !x.human || x.finished)) this.endTimer = 0.5;
   }
-  destroy() { clearInterval(this.timer); rooms.delete(this.id); log(`room ${this.id} closed`); }
+  destroy() { if (this.dead) return; this.dead = true; clearInterval(this.timer); rooms.delete(this.id); log(`room ${this.id} closed`); }
 
-  sendLobby() { for (const c of this.clients) send(c, { t: 'lobby', level: this.levelIndex, left: Math.max(0, this.lobbyLeft), you: c.slot, slots: this.slotsInfo() }); }
+  // ---- sala paga: travar lobby, cobrar, devolver
+  lockPay() {
+    const n = this.humans(); this.phase = 'pay'; this.share = shareFor(this.pack, n); this.payLeft = PAY_WINDOW;
+    for (const c of this.clients) c.paid = false;
+    log(`room ${this.id}: LOCK ${n} players, ${this.pack.code} $${this.pack.usd} -> $${this.share} each`);
+    this.sendLobby();
+  }
+  onPay(c, m) {
+    if (!this.paid || this.phase !== 'pay' || c.paid || !payOk(m)) return;
+    c.paid = true; c.payRef = String(m.pay).slice(0, 64); c.amount = this.share;
+    log(`PAY room ${this.id}: ${c.name} paid $${this.share} (${PAYMENT_MODE}) ref ${c.payRef}`);
+    if ([...this.clients].every(x => x.paid)) { log(`room ${this.id}: all paid, starting`); this.startRound(); } else this.sendLobby();
+  }
+  relock(reason) {   // devolve o que já foi pago e reabre o lobby (o preço precisa ser recalculado)
+    for (const c of this.clients) if (c.paid) { send(c, { t: 'refund', amount: c.amount, reason }); log(`REFUND room ${this.id}: ${c.name} $${c.amount} (${PAYMENT_MODE}) - ${reason}`); c.paid = false; }
+    this.phase = 'lobby'; this.startLeft = Math.min(PAID_START, 10); this.waitLeft = PAID_WAIT; this.payLeft = 0;
+    this.sendLobby();
+  }
+  payTimeout() {
+    for (const c of [...this.clients]) if (!c.paid) {
+      log(`room ${this.id}: ${c.name} did not pay in time - removed`);
+      this.slots[c.slot] = null; this.clients.delete(c); c.room = null; send(c, { t: 'kicked', reason: 'You did not pay in time' }); setTimeout(() => { try { c.ws.close(); } catch { /* ignore */ } }, 300);
+    }
+    if (this.humans() === 0) this.destroy(); else this.relock('Someone did not pay in time');
+  }
+  cancelPaid() {
+    log(`room ${this.id}: cancelled (not enough players)`);
+    this.broadcast({ t: 'cancel', reason: 'Not enough players joined' });
+    for (const c of [...this.clients]) { c.room = null; setTimeout(() => { try { c.ws.close(); } catch { /* ignore */ } }, 300); }
+    this.destroy();
+  }
+  closePaid() {
+    this.broadcast({ t: 'closed' });
+    for (const c of [...this.clients]) { c.room = null; setTimeout(() => { try { c.ws.close(); } catch { /* ignore */ } }, 300); }
+    this.destroy();
+  }
+
+  sendLobby() {
+    const n = this.humans();
+    for (const c of this.clients) {
+      const m = { t: 'lobby', level: this.levelIndex, left: Math.max(0, this.lobbyLeft), you: c.slot, slots: this.slotsInfo() };
+      if (this.paid) {
+        const stage = this.phase === 'pay' ? 'pay' : n >= PAID_MIN ? 'lock' : 'wait';
+        m.paid = { stage, pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
+        m.left = Math.max(0, stage === 'pay' ? this.payLeft : stage === 'lock' ? this.startLeft : this.waitLeft);
+      }
+      send(c, m);
+    }
+  }
   sendRound(c) {
     const left = this.phase === 'race' ? Math.max(0, this.leftT) : this.roundTime;
     send(c, { t: 'round', phase: this.phase, level: this.levelIndex, name: this.level.name, you: c.slot, slots: this.slotsInfo(), cd: Math.max(0, this.cd || 0), left,
-      mt: this.world.mt, roundTime: this.roundTime, dead: deadTileIndices(this.world), fc: this.finishedCount || 0, ib: this.coolSpots() });
+      mt: this.world.mt, roundTime: this.roundTime, dead: deadTileIndices(this.world), fc: this.finishedCount || 0, ib: this.coolSpots(), paid: this.paid ? { pack: this.pack, share: this.share, n: this.starters } : undefined });
   }
 
   coolSpots() { const o = []; this.world.itemSpots.forEach((sp, k) => { if (sp.cool > 0) o.push(k); }); return o; }
@@ -140,55 +207,83 @@ class Room {
     this.nextLevel = null; this.buildWorld();
     const used = new Set(this.slots.filter(r => r && r.human).map(r => r.pk));
     const free = SPECIES.map((_, k) => k).filter(k => !used.has(k)); for (let k = free.length - 1; k > 0; k--) { const j = rand(k + 1); [free[k], free[j]] = [free[j], free[k]]; }
+    if (this.paid) { this.starters = this.humans(); this.winner = null; for (const h of this.slots) if (h && h.human) { h.adv = 120; h.lastStateT = 0; h.sus = 0; } }
     for (let i = 0; i < SLOTS; i++) {
       let r = this.slots[i];
+      if (this.paid && (!r || !r.human)) { this.slots[i] = null; continue; }
       if (!r || !r.human) { r = createRacer(i); r.human = null; const pk = free.length ? free.pop() : rand(SPECIES.length); r.pk = pk; r.name = SPECIES[pk]; this.slots[i] = r; }
       spawnRacer(r, this.world.spawnFn(i)); r.finTime = null; r.rep = 1; r.itemSent = null;
     }
     this.evq.length = 0; this.ibKey = ''; this.trKey = '';
     this.phase = 'countdown'; this.cd = CFG.countdown; this.finishedCount = 0; this.endTimer = 0; this.raceT = 0; this.leftT = this.roundTime; this.deadKey = '';
     for (const c of this.clients) this.sendRound(c);
-    log(`room ${this.id}: round "${this.level.name}" with ${this.humans()} humans + ${SLOTS - this.humans()} bots`);
+    log(`room ${this.id}: round "${this.level.name}" with ${this.humans()} humans + ${this.paid ? 0 : SLOTS - this.humans()} bots${this.paid ? ' (PAID, no bots)' : ''}`);
   }
   finish(r) {
     if (r.finished) return;
     r.finished = true; r.rank = ++this.finishedCount; r.finTime = this.raceT;
-    r.qualified = r.rank <= CFG.qualifySlots; r.eliminated = !r.qualified; r.victory = r.qualified;
+    if (this.paid) { r.qualified = true; r.eliminated = false; r.victory = r.rank === 1; }
+    else { r.qualified = r.rank <= CFG.qualifySlots; r.eliminated = !r.qualified; r.victory = r.qualified; }
     this.broadcast({ t: 'fin', i: r.i, rank: r.rank, q: r.qualified ? 1 : 0, tm: r2(this.raceT) });
-    if (this.finishedCount >= CFG.qualifySlots && !this.endTimer) this.endTimer = 3;
+    if (this.paid) {
+      if (r.rank === 1) { this.winner = r; this.endTimer = PAID_GRACE; log(`room ${this.id}: WINNER ${r.name} in ${r2(this.raceT)}s`); }
+      if (this.slots.every(x => !x || !x.human || x.finished)) this.endTimer = 0.5;
+    } else if (this.finishedCount >= CFG.qualifySlots && !this.endTimer) this.endTimer = 3;
   }
   endMsg(late) {
     const rows = this.slots.filter(Boolean).sort((a, b) => (b.finished - a.finished) || (a.finished ? a.rank - b.rank : a.pos.z - b.pos.z))
       .map(r => ({ i: r.i, name: r.name, pk: r.pk, bot: !r.human, rank: r.finished ? r.rank : 0, tm: r.finished ? r2(r.finTime) : null }));
+    if (this.paid) return { t: 'end', rows, next: null, late: !!late, paid: { winner: this.winner ? { i: this.winner.i, name: this.winner.name } : null, pack: this.pack, share: this.share, n: this.starters, left: Math.max(0, Math.ceil(this.resultsLeft)) } };
     return { t: 'end', rows, next: { name: LEVELS[this.nextLevel].name, in: Math.max(0, Math.ceil(this.resultsLeft)) }, late: !!late };
   }
   endRound() {
-    this.phase = 'results'; this.resultsLeft = RESULTS_SECONDS; this.nextLevel = this.pickLevel();
+    this.phase = 'results'; this.resultsLeft = this.paid ? PAID_RESULTS : RESULTS_SECONDS; this.nextLevel = this.paid ? null : this.pickLevel();
+    if (this.paid) {
+      const w = this.winner;
+      if (w) log(`PAID RESULT room ${this.id}: winner "${w.name}" (ref ${w.human ? w.human.payRef : '-'}) gets ${this.pack.code} - pool ${this.starters} x $${this.share}`);
+      else { log(`PAID RESULT room ${this.id}: nobody finished - REFUND all`); for (const c of this.clients) send(c, { t: 'refund', amount: c.amount, reason: 'Nobody finished the race' }); }
+    }
     this.broadcast(this.endMsg(false));
-    log(`room ${this.id}: round over (${this.finishedCount} finished); next "${LEVELS[this.nextLevel].name}"`);
+    log(`room ${this.id}: round over (${this.finishedCount} finished)${this.paid ? '' : `; next "${LEVELS[this.nextLevel].name}"`}`);
   }
 
   onState(c, p) {
     const r = this.slots[c.slot]; if (!r || r.human !== c || !Array.isArray(p) || p.length < 8) return;
     if (this.phase === 'results' || p.slice(0, 7).some(v => !Number.isFinite(v)) || Math.abs(p[0]) > 2000 || Math.abs(p[2]) > 2000) return;
+    if (this.paid && this.phase === 'race') {   // antitrapaça: quanto o jogador pode AVANÇAR é limitado pelo tempo (60 m/s) + créditos de troca de lugar
+      const nowMs = Date.now(), dtS = r.lastStateT ? Math.min(2, (nowMs - r.lastStateT) / 1000) : 0; r.lastStateT = nowMs;
+      r.adv = Math.min(120, (r.adv ?? 120) + dtS * 60);
+      const dz = r.pos.z - p[2];
+      if (dz > 0) {
+        if (dz > r.adv) { r.sus = (r.sus || 0) + 1; if (r.sus === 1 || r.sus % 50 === 0) log(`room ${this.id}: SUSPECT ${c.name} jumped ${dz.toFixed(0)}m with budget ${r.adv.toFixed(0)}m (x${r.sus})`); return; }
+        r.adv -= dz;
+      }
+    }
     r.pos.x = p[0]; r.pos.y = p[1]; r.pos.z = p[2]; r.yaw = p[3]; r.vel.x = p[4]; r.vel.y = p[5]; r.vel.z = p[6]; r.rep = p[7] | 0;
     r.grounded = !!(r.rep & 1);
   }
   onFin(c, p) {
     const r = this.slots[c.slot];
     if (this.phase !== 'race' || !r || r.human !== c || r.finished) return;
-    if (Array.isArray(p) && p.length >= 3 && p.every(Number.isFinite)) { r.pos.x = p[0]; r.pos.y = p[1]; r.pos.z = p[2]; }
-    if (r.pos.z < this.world.finishZ + 2.5 && r.pos.y > this.world.finishY - 2) this.finish(r);
+    if (!this.paid && Array.isArray(p) && p.length >= 3 && p.every(Number.isFinite)) { r.pos.x = p[0]; r.pos.y = p[1]; r.pos.z = p[2]; }
+    if (this.paid && this.raceT < Math.abs(this.world.finishZ) / MAX_AVG_SPEED) { log(`room ${this.id}: SUSPECT ${c.name} finish too fast (${r2(this.raceT)}s)`); return; }
+    if (r.pos.z < this.world.finishZ + (this.paid ? 12 : 2.5) && r.pos.y > this.world.finishY - 2) this.finish(r);
   }
 
   tick() {
     const now = Date.now(); const dt = Math.min(0.1, (now - this.last) / 1000); this.last = now; this.tickN++;
     const w = this.world, bots = this.slots.filter(r => r && !r.human), humans = this.slots.filter(r => r && r.human);
-    if (this.phase === 'lobby') {
+    if (this.phase === 'lobby' || this.phase === 'pay') {
       updateWorld(w, dt, []); for (const h of humans) if (h.grounded) triggerFallUnder(w, h);
-      this.lobbyLeft -= dt;
       if (this.tickN % 60 === 0) this.sendLobby();
-      if (this.humans() >= SLOTS || this.lobbyLeft <= 0) this.startRound();
+      if (!this.paid) { this.lobbyLeft -= dt; if (this.humans() >= SLOTS || this.lobbyLeft <= 0) this.startRound(); }
+      else if (this.phase === 'pay') { this.payLeft -= dt; if (this.payLeft <= 0) this.payTimeout(); }
+      else {
+        const n = this.humans();
+        if (n >= PAID_MIN) this.startLeft -= dt; else { this.startLeft = PAID_START; this.waitLeft -= dt; }
+        if (n >= SLOTS || (n >= PAID_MIN && this.startLeft <= 0)) this.lockPay();
+        else if (n < PAID_MIN && this.waitLeft <= 0) this.cancelPaid();
+      }
     } else if (this.phase === 'countdown' || this.phase === 'race') {
       updateWorld(w, dt, bots); for (const h of humans) if (h.grounded) triggerFallUnder(w, h);
       if (this.phase === 'countdown') { this.cd -= dt; if (this.cd <= 0) this.phase = 'race'; }
@@ -207,7 +302,7 @@ class Room {
       }
     } else if (this.phase === 'results') {
       updateWorld(w, dt, []); this.resultsLeft -= dt;
-      if (this.resultsLeft <= 0) this.startRound();
+      if (this.resultsLeft <= 0) { if (this.paid) this.closePaid(); else this.startRound(); }
     }
     this.sendAcc += dt;
     if (this.sendAcc >= 0.05) { this.sendAcc = 0; this.snapshot(); }
@@ -234,10 +329,18 @@ class Room {
 
 function findRoom() {
   let best = null;
-  for (const rm of rooms.values()) if (rm.humans() < SLOTS && (!best || rm.humans() > best.humans())) best = rm;
+  for (const rm of rooms.values()) if (!rm.paid && rm.humans() < SLOTS && (!best || rm.humans() > best.humans())) best = rm;
   if (best) return best;
   if (rooms.size >= MAX_ROOMS) return null;
   const rm = new Room(); rooms.set(rm.id, rm); return rm;
+}
+
+function findPaidRoom(pack) {
+  let best = null;
+  for (const rm of rooms.values()) if (rm.paid && rm.pack.code === pack.code && rm.phase === 'lobby' && rm.humans() < SLOTS && (!best || rm.humans() > best.humans())) best = rm;
+  if (best) return best;
+  if (rooms.size >= MAX_ROOMS) return null;
+  const rm = new Room(pack); rooms.set(rm.id, rm); return rm;
 }
 
 // ------------------------------------------------------------------ WebSocket
@@ -247,17 +350,19 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 });
 wss.on('connection', ws => {
-  const c = { ws, id: ++clientSeq, name: '', pk: 0, room: null, slot: -1 };
+  const c = { ws, id: ++clientSeq, name: '', pk: 0, room: null, slot: -1, paid: false, payRef: '', amount: 0 };
   ws.isAlive = true; ws.on('pong', () => { ws.isAlive = true; });
   ws.on('message', data => {
     let m; try { m = JSON.parse(data.toString()); } catch { return; }
     if (m.t === 'join' && !c.room) {
       c.name = cleanName(m.name); c.pk = Math.max(0, Math.min(SPECIES.length - 1, m.pk | 0));
-      const room = findRoom();
+      const pack = m.paid ? (PACKS.find(p => p.code === m.pack) || PACKS[0]) : null;
+      const room = pack ? findPaidRoom(pack) : findRoom();
       if (!room || !room.addHuman(c)) { send(c, { t: 'full' }); ws.close(); }
     } else if (m.t === 's' && c.room) c.room.onState(c, m.p);
     else if (m.t === 'fin' && c.room) c.room.onFin(c, m.p);
     else if (m.t === 'use' && c.room) c.room.onUse(c);
+    else if (m.t === 'pay' && c.room) c.room.onPay(c, m);
     else if (m.t === 'ping') send(c, { t: 'pong' });
   });
   ws.on('close', () => { if (c.room) c.room.removeHuman(c); });

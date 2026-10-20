@@ -67,12 +67,47 @@ kbd{display:inline-block;min-width:24px;padding:1px 6px;margin:0 2px;border-radi
 #picker button.card:hover{transform:translateY(-3px) scale(1.05);border-color:#fff}
 #picker button.card.sel{border-color:#ffe135;transform:scale(1.1);z-index:2;box-shadow:0 0 0 2px #1a0d2e,0 0 20px #ffe135,0 0 34px #ff4fa3aa}
 #picker button.card:not(.sel){filter:saturate(.75) brightness(.85)}
+/* tela de modo + sala paga */
+#mode{position:fixed;left:50%;bottom:6vh;transform:translateX(-50%);width:820px;max-width:94vw;text-align:center;color:#fff;display:none}
+#mode h1{margin:0 0 14px;font-size:64px;font-weight:900;letter-spacing:3px;background:linear-gradient(90deg,#ffe135,#ff4fa3,#4fe3ff);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 #1a0d2e) drop-shadow(0 0 18px #ff4fa388)}
+#mode .cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.modeCard{border:3px solid #ffffff66;border-radius:20px;padding:22px 16px 20px;cursor:pointer;color:#fff;font-family:inherit;display:flex;flex-direction:column;gap:8px;align-items:center;transition:transform .12s,box-shadow .12s}
+.modeCard b{font-size:34px;font-weight:900;letter-spacing:1px;text-shadow:0 3px 0 #0006}
+.modeCard small{font-size:15px;opacity:.95;font-weight:600;max-width:300px}
+.modeCard em{font-size:13px;font-style:normal;font-weight:800;background:#0006;border-radius:999px;padding:3px 12px}
+.modeCard:hover{transform:translateY(-4px) scale(1.03)}
+#freeBtn{background:linear-gradient(160deg,#35d96b,#0f8f3d);box-shadow:0 8px 0 #0a5a27,0 0 26px #35d96b66}
+#paidBtn{background:linear-gradient(160deg,#ffcb05,#ff7a1a);box-shadow:0 8px 0 #a64b00,0 0 26px #ffcb0577;color:#2a1055}
+#paidBtn b{text-shadow:0 3px 0 #fff6}
+#paidBox{display:none;margin:4px 0 10px;padding:10px 12px;border-radius:14px;background:#0004;border:2px solid #ffcb0588;font-size:14px;font-weight:600}
+#paidBox .packs{display:flex;gap:8px;justify-content:center;margin:8px 0}
+#paidBox .packs button{padding:8px 14px;border-radius:12px;border:2px solid #ffffff55;background:#ffffff1f;color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
+#paidBox .packs button.sel{background:#ffcb05;color:#2a1055;border-color:#fff}
+#paidBox .rules{opacity:.9;line-height:1.5}
+#backBtn{position:absolute;left:14px;top:12px;background:transparent;border:2px solid #ffffff66;color:#fff;border-radius:10px;padding:4px 12px;font-weight:700;cursor:pointer;font-family:inherit}
+#payBox{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;max-width:92vw;padding:22px 24px;border-radius:20px;color:#fff;text-align:center;display:none;background:linear-gradient(160deg,#3b1480f2,#16084af2);border:3px solid #ffcb05;box-shadow:0 12px 50px #000b,0 0 40px #ffcb0566}
+#payBox h2{margin:0 0 6px;font-size:26px;font-weight:900;color:#ffcb05}
+#payBox .big{font-size:48px;font-weight:900;margin:6px 0}
+#payBox .row{font-size:15px;opacity:.9;margin:2px 0}
+#payBox button{margin-top:12px;font-size:22px;font-weight:900;padding:10px 34px;border-radius:14px;border:0;cursor:pointer;background:linear-gradient(180deg,#5dff7a,#1fc24a);color:#fff;box-shadow:0 5px 0 #0f7a2b;font-family:inherit}
+#payBox .test{margin-top:10px;font-size:12px;opacity:.75}
+#results .winner{margin:0 0 8px;text-align:center;font-size:20px;font-weight:900;color:#ffe135}
 </style></head><body>
 <div id="hud"></div><div id="msg"></div><div id="prog"></div><div id="item"></div><div id="toast"></div><div id="flash"></div>
 <div id="menu"></div><div id="spec"></div><div id="specTime"></div><div id="results"></div>
+<div id="mode">
+  <h1>POKE RUN</h1>
+  <div class="cards">
+    <button id="freeBtn" class="modeCard"><b>PLAY FREE</b><small>Race with friends and bots · up to 16 players</small><em>no payment</em></button>
+    <button id="paidBtn" class="modeCard"><b>PLAY FOR PRIZE</b><small>Split the price of a card pack. The winner takes the pack!</small><em>real players only · no bots · min. 2</em></button>
+  </div>
+</div>
+<div id="payBox"></div>
 <div id="home">
+  <button id="backBtn">&larr; Back</button>
   <h1>POKE RUN</h1>
   <input id="nameIn" maxlength="14" placeholder="Your name" autocomplete="off">
+  <div id="paidBox"></div>
   <div id="picker"></div>
   <div class="row"><button id="playBtn" class="big">PLAY</button><button id="practiceBtn" class="alt">Practice (offline)</button></div>
   <div class="tip">Pick your character (← → keys work too) · online races with up to 16 players, bots fill empty spots</div>

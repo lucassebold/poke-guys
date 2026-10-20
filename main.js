@@ -452,16 +452,19 @@ function specSwitch(dir) {
 
 // ---------- tela de resultados ----------
 const resultsEl = $('results');
-function showResults(rows, nextName, secs) {
+function showResults(rows, nextName, secs, paid) {
   const you = player ? player.i : -1;
-  resultsEl.innerHTML = '<h2>Results</h2><div class="next" id="nextInfo"></div><table>' + rows.map((r, k) =>
+  let banner = '';
+  if (paid) banner = paid.winner ? `<div class="winner">🏆 ${paid.winner.i === you ? 'YOU WON' : esc(paid.winner.name) + ' wins'} the ${esc(paid.pack.label)}!<br><small style="font-size:13px;opacity:.85">Test mode — no real pack was bought</small></div>` : '<div class="winner">Nobody finished — everyone is refunded (test)</div>';
+  resultsEl.dataset.paid = paid ? '1' : '';
+  resultsEl.innerHTML = '<h2>Results</h2>' + banner + '<div class="next" id="nextInfo"></div><table>' + rows.map((r, k) =>
     `<tr class="${r.rank && r.rank <= CFG.qualifySlots ? 'q' : ''}${r.i === you ? ' you' : ''}"><td>${r.rank || '–'}</td><td>${esc(r.name)}</td><td>${r.rank ? '' : 'DNF'}${r.tm != null ? r.tm.toFixed(1) + 's' : ''}</td></tr>`).join('')
     + '</table>';
   resultsEl.style.display = 'block';
   nextAt = secs; resultsEl.dataset.next = nextName;
   updateNextInfo();
 }
-function updateNextInfo() { const n = $('nextInfo'); if (n) n.textContent = `Next course: ${resultsEl.dataset.next} — ${Math.max(0, Math.ceil(nextAt))}s`; }
+function updateNextInfo() { const n = $('nextInfo'); if (n) n.textContent = resultsEl.dataset.paid ? `Back to the main screen in ${Math.max(0, Math.ceil(nextAt))}s` : `Next course: ${resultsEl.dataset.next} — ${Math.max(0, Math.ceil(nextAt))}s`; }
 function hideResults() { resultsEl.style.display = 'none'; nextAt = 0; }
 
 // ---------- offline (prática) ----------
@@ -550,14 +553,50 @@ let net = null, sendAcc = 0, myIdx = -1;
 const snapBuf = [];
 function wsUrl() { const q = /[?&]server=([^&]+)/.exec(location.search); if (q) return decodeURIComponent(q[1]); return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'; }
 function closeNet() { if (net) { net.close(); net = null; } snapBuf.length = 0; }
+// ---------- salas pagas (pagamento simulado nesta versão) ----------
+let paidMode = false, paidCfg = null, paidPack = 'pokemon_25', paidRound = null, payShown = false;
+const PAID_DEFAULT = { mode: 'sim', min: 2, packs: [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }] };
+fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; }).catch(() => { paidCfg = PAID_DEFAULT; });
+const usd = v => '$' + (+v).toFixed(2);
+function packByCode(c) { return ((paidCfg || PAID_DEFAULT).packs.find(p => p.code === c)) || (paidCfg || PAID_DEFAULT).packs[0]; }
+function renderPaidBox() {
+  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT;
+  box.style.display = paidMode ? 'block' : 'none'; if (!paidMode) return;
+  box.innerHTML = `<div><b>Pick the prize pack</b></div><div class="packs">${cfg.packs.map(p => `<button data-c="${p.code}" class="${p.code === paidPack ? 'sel' : ''}">${esc(p.label)} · ${usd(p.usd)}</button>`).join('')}</div>`
+    + `<div class="rules">Joining is free. When at least ${cfg.min} players are in the lobby, it locks and the pack price is <b>split between everyone</b> (more players = cheaper).<br>`
+    + `Real players only, no bots. First to cross the finish line wins the pack. Payments are in <b>TEST mode</b> — no real money.</div>`;
+  box.querySelectorAll('button').forEach(b => b.onclick = () => { paidPack = b.dataset.c; renderPaidBox(); play('click', { vol: 0.5 }); });
+}
+function showMode() {
+  $('mode').style.display = 'block'; homeEl.style.display = 'none'; $('payBox').style.display = 'none'; paidMode = false;
+}
+function enterHome(paid) {
+  paidMode = paid; $('mode').style.display = 'none'; homeEl.style.display = 'block';
+  $('playBtn').textContent = paid ? 'FIND A PRIZE RACE' : 'PLAY'; $('practiceBtn').style.display = paid ? 'none' : '';
+  const tip = homeEl.querySelector('.tip'); if (tip) tip.textContent = paid ? 'Pick your character (← → keys work too) · prize races are real players only — no bots' : 'Pick your character (← → keys work too) · online races with up to 16 players, bots fill empty spots';
+  renderPaidBox(); play('click', { vol: 0.5 });
+}
+let payKey = '';
+function showPayBox(p) {
+  const box = $('payBox'); payShown = true;
+  const key = `${p.youPaid}|${p.share}|${p.n}|${p.paidCount}`;
+  if (key !== payKey || box.style.display !== 'block') {   // só reconstrói quando algo mudou (senão o clique no botão se perde)
+    payKey = key;
+    if (p.youPaid) box.innerHTML = `<h2>Payment received ✓</h2><div class="big">${p.paidCount}/${p.n}</div><div class="row">Waiting for the other players to pay…</div><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div>`;
+    else box.innerHTML = `<h2>Lobby locked — ${p.n} players</h2><div class="row">Prize: <b>${esc(p.pack.label)}</b> (${usd(p.pack.usd)})</div><div class="row">Split ${p.n} ways — your share:</div><div class="big">${usd(p.share)}</div><button id="payNow">PAY ${usd(p.share)}</button><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div><div class="test">TEST MODE — no real money is charged</div>`;
+    box.style.display = 'block';
+    const b = $('payNow'); if (b) b.onclick = () => { if (net) net.send({ t: 'pay', pay: 'SIM:' + Math.random().toString(36).slice(2, 10) }); b.disabled = true; play('click', { vol: 0.6 }); };
+  }
+}
+function hidePayBox() { $('payBox').style.display = 'none'; payShown = false; payKey = ''; }
 function goOnline() {
   unlock(); const nm = $('nameIn').value.trim().slice(0, 14); CHOICE.name = nm;
   try { localStorage.setItem('sl_name', nm); localStorage.setItem('sl_pk', String(CHOICE.pk)); } catch { /* ignore */ }
   $('home').style.display = 'none'; menuEl.style.display = 'none'; hideResults();
-  mode = 'online'; state = 'connecting'; msg.innerHTML = 'Connecting…';
+  mode = 'online'; state = 'connecting'; msg.innerHTML = 'Connecting…'; paidRound = null; hidePayBox();
   clearRacers(); snapBuf.length = 0;
   net = openSocket(wsUrl(), {
-    open() { net.send({ t: 'join', name: CHOICE.name, pk: CHOICE.pk }); },
+    open() { net.send(paidMode ? { t: 'join', name: CHOICE.name, pk: CHOICE.pk, paid: true, pack: paidPack } : { t: 'join', name: CHOICE.name, pk: CHOICE.pk }); },
     msg: onNetMsg,
     close() { if (mode === 'online' && state !== 'home') { msg.innerHTML = 'Disconnected<small>returning to the main screen…</small>'; setTimeout(goHome, 2200); } },
   });
@@ -578,15 +617,25 @@ function onNetMsg(m) {
     world.serverTiles = true;
     if (state !== 'lobby' || !player) { buildFromSlots(m.slots, m.you); resetWorldClock(world); }
     else syncSlots(m.slots);
-    state = 'lobby'; lobbyInfo = { left: m.left, humans: m.slots.length }; hideResults(); spec.active = false;
+    state = 'lobby'; lobbyInfo = { left: m.left, humans: m.slots.length, paid: m.paid || null }; hideResults(); spec.active = false;
+    if (m.paid && m.paid.stage === 'pay') showPayBox(m.paid); else if (payShown) hidePayBox();
   } else if (m.t === 'round') {
     if (m.level !== levelIndex) loadLevel(m.level);
     world.serverTiles = true; roundTime = m.roundTime;
     buildFromSlots(m.slots, m.you); resetWorldClock(world); world.mt = m.mt || 0;
     if (m.dead) applyDead(world, m.dead); if (m.ib) setSpotsCool(m.ib);
     state = m.phase; t = m.phase === 'countdown' ? m.cd : m.left; finishedCount = m.fc || 0; endTimer = 0; raceElapsed = Math.max(0, roundTime - (m.left || roundTime));
+    paidRound = m.paid || null; hidePayBox();
     hideResults(); spec.active = false; spec.index = 0; msg.textContent = ''; msgTimer = 0; snapBuf.length = 0; camYaw = 0;
     startAmbient(); if (m.phase === 'countdown') play('count', { vol: 0.9 });
+  } else if (m.t === 'gone') {
+    const r = byIdx.get(m.i); if (r && !r.local) { disposeRacer(r); racers.splice(racers.indexOf(r), 1); byIdx.delete(m.i); }
+  } else if (m.t === 'refund') {
+    hidePayBox(); toast(`Refunded ${usd(m.amount)} (test) — ${m.reason}`, '#7dd3ff');
+  } else if (m.t === 'kicked' || m.t === 'cancel') {
+    hidePayBox(); closeNet(); msg.innerHTML = `${m.t === 'kicked' ? 'Removed from the lobby' : 'Race cancelled'}<small>${esc(m.reason || '')} — returning to the main screen…</small>`; setTimeout(goHome, 3200);
+  } else if (m.t === 'closed') {
+    closeNet(); goHome();
   } else if (m.t === 'slot') {
     replaceSlot(m);
   } else if (m.t === 'snap') {
@@ -601,12 +650,12 @@ function onNetMsg(m) {
     const r = byIdx.get(m.i); if (!r) return;
     r.finished = true; r.rank = m.rank; r.qualified = !!m.q; r.eliminated = !m.q; r.victory = !!m.q; r.finTime = m.tm;
     if (r.local) {
-      msg.innerHTML = `FINISHED ${ord(m.rank)}<small>${m.q ? 'QUALIFIED!' : 'ELIMINATED!'}</small>`; msgTimer = 3;
+      msg.innerHTML = `FINISHED ${ord(m.rank)}<small>${paidRound ? (m.rank === 1 ? 'YOU WIN THE PRIZE!' : 'GOOD RACE!') : m.q ? 'QUALIFIED!' : 'ELIMINATED!'}</small>`; msgTimer = 3;
       play(m.q ? (m.rank === 1 ? 'victory' : 'qualified') : 'elim', { vol: 0.9 }); spec.index = 0;
     }
   } else if (m.t === 'end') {
     state = 'end'; msg.textContent = ''; msgTimer = 0;
-    showResults(m.rows, m.next.name, m.next.in);
+    showResults(m.rows, m.next ? m.next.name : '', m.next ? m.next.in : (m.paid ? m.paid.left : 0), m.paid || null);
     nextAction = null;
   } else if (m.t === 'fx') {
     if (player && m.fx) { applyFx(player, m.fx); fxLocal(m.fx); }
@@ -707,7 +756,7 @@ function buildPicker() {
 }
 function goHome() {
   closeNet(); mode = 'offline'; state = 'home'; hideResults(); spec.active = false; clearRacers();
-  menuEl.style.display = 'none'; homeEl.style.display = 'block'; msg.textContent = ''; hud.textContent = ''; $('spec').style.display = 'none'; $('specTime').style.display = 'none';
+  menuEl.style.display = 'none'; showMode(); msg.textContent = ''; hud.textContent = ''; hidePayBox(); $('spec').style.display = 'none'; $('specTime').style.display = 'none';
   $('nameIn').value = CHOICE.name; buildPicker(); setPreview();
   if (levelIndex !== 0) loadLevel(0);
 }
@@ -719,6 +768,9 @@ function showPracticeMenu() {
   const selEl = menuEl.querySelector('.sel'); if (selEl) selEl.scrollIntoView({ block: 'nearest' });
   menuEl.querySelectorAll('.item').forEach(el => el.addEventListener('click', ev => { ev.stopPropagation(); menuSel = +el.dataset.i; unlock(); startOffline(menuSel); }));
 }
+$('freeBtn').onclick = () => { unlock(); enterHome(false); };
+$('paidBtn').onclick = () => { unlock(); enterHome(true); };
+$('backBtn').onclick = () => { showMode(); play('click', { vol: 0.5 }); };
 $('playBtn').onclick = () => goOnline();
 $('practiceBtn').onclick = () => { unlock(); showPracticeMenu(); };
 $('nameIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') goOnline(); });
@@ -727,6 +779,7 @@ $('nameIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key ==
 addEventListener('keydown', e => {
   unlock();
   if (state === 'home') {
+    if ($('mode').style.display !== 'none') return;
     if (document.activeElement === $('nameIn')) return;
     if (e.code === 'ArrowLeft') { CHOICE.pk = (CHOICE.pk + ROSTER.length - 1) % ROSTER.length; buildPicker(); setPreview(); }
     else if (e.code === 'ArrowRight') { CHOICE.pk = (CHOICE.pk + 1) % ROSTER.length; buildPicker(); setPreview(); }
@@ -842,14 +895,19 @@ function render(dt = 0) {
   } else { specEl.style.display = 'none'; specTimeEl.style.display = 'none'; }
   if (state === 'lobby') {
     lobbyInfo.left -= dt; const c = Math.max(0, Math.ceil(lobbyInfo.left));
-    msg.innerHTML = `Starting in ${c}<small>${lobbyInfo.humans}/${CFG.racers} players — bots fill the empty spots</small>`;
+const pd = lobbyInfo.paid;
+    if (pd && pd.stage === 'wait') msg.innerHTML = `Waiting for players<small>${pd.n}/${pd.min} needed · prize: ${esc(pd.pack.label)} (${usd(pd.pack.usd)}) · cancels in ${c}s</small>`;
+    else if (pd && pd.stage === 'lock') msg.innerHTML = `Locking in ${c}<small>${pd.n} players · price per player ${usd(pd.est)} · more players = cheaper · no bots</small>`;
+    else if (pd) { msg.innerHTML = ''; const pt = $('payT'); if (pt) pt.textContent = c; }
+    else msg.innerHTML = `Starting in ${c}<small>${lobbyInfo.humans}/${CFG.racers} players — bots fill the empty spots</small>`;
     hud.textContent = level.name;
   } else if (state === 'countdown') {
     const c = Math.ceil(t); msg.textContent = c > 0 ? String(c) : 'GO!';
     hud.textContent = level.name;
   } else if (state === 'race' || state === 'end') {
     const order = [...racers].sort((a, b) => (b.finished - a.finished) || (a.finished ? a.rank - b.rank : a.pos.z - b.pos.z));
-    hud.innerHTML = `${ord(order.indexOf(player) + 1)} / ${racers.length} &nbsp;|&nbsp; Qualified: ${Math.min(finishedCount, CFG.qualifySlots)}/${CFG.qualifySlots} &nbsp;|&nbsp; Time: ${Math.max(0, Math.ceil(t))}s &nbsp;|&nbsp; ${esc(level.name)}`;
+    hud.innerHTML = paidRound ? `${ord(order.indexOf(player) + 1)} / ${racers.length} &nbsp;|&nbsp; 🏆 ${esc(paidRound.pack.label)} &nbsp;|&nbsp; Time: ${Math.max(0, Math.ceil(t))}s &nbsp;|&nbsp; ${esc(level.name)}`
+      : `${ord(order.indexOf(player) + 1)} / ${racers.length} &nbsp;|&nbsp; Qualified: ${Math.min(finishedCount, CFG.qualifySlots)}/${CFG.qualifySlots} &nbsp;|&nbsp; Time: ${Math.max(0, Math.ceil(t))}s &nbsp;|&nbsp; ${esc(level.name)}`;
     if (state === 'race' && msg.textContent === 'GO!') msg.textContent = '';
   }
   FX.update(dt, tn, camera.position); FX.render();
