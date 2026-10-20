@@ -165,3 +165,10 @@ Teste: 13–15 de 15 bots terminam em ~17 s; na fase 1, 8+ classificam em ~75 s.
 Tentei reconstruir mais fases reais (`level28_ufo`, `level4_pushy`, …): nelas o tamanho dos colisores não está na escala do Transform (fica no componente Quantum, não decodificado), então os dados exportados não são utilizáveis.
 Teste com bots (13 corredores IA, 130 s simulados): todas as 12 fases são completáveis (5–15 bots terminam, dependendo do comprimento).
 Novos mecanismos (todos nossos): gelo, pisos que caem, plataformas intermitentes, trampolim genérico, ambiente por fase (tinta do céu/horizonte, mar, sol), menu de seleção.
+
+## M. Multiplayer (arquitetura — nossa)
+
+Servidor Node (`server.js`, dependência `ws`) + os mesmos módulos de simulação no navegador (`shared/sim.js`, `shared/levels.js`).
+Cada jogador simula o próprio boneco e envia a posição ~20×/s; o servidor roda os bots (mesma física), o relógio da rodada, os pisos que caem e a ordem de chegada, e devolve `snap` ~20×/s.
+Salas de até 16; vagas vazias = bots; entrar no meio da corrida substitui o bot mais atrasado; ao sair, o boneco vira bot. Fim de rodada → tabela de resultados → próxima fase automática.
+Testado: 17 clientes (o 17º abre uma 2ª sala), entrada no meio da corrida, cruzar a chegada, fim de rodada e avanço automático (clientes Node e navegador Edge real).
