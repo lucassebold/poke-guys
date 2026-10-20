@@ -5,8 +5,8 @@
 //  - o servidor roda os BOTS (mesma física de shared/sim.js), o relógio da rodada, os pisos que caem e a ordem de chegada;
 //  - a cada ~50 ms o servidor manda um "snap" com todos os corredores; os navegadores interpolam.
 //
-// Cliente -> servidor:  {t:'join', name, pk[, paid, pack]} · {t:'s', p:[x,y,z,yaw,vx,vy,vz,flags]} · {t:'fin'} · {t:'use'} · {t:'pay', pay} · {t:'ping'}
-// Servidor -> cliente:  lobby · round · slot · gone · snap · fin · end · full · refund · kicked · cancel · closed · pong
+// Cliente -> servidor:  {t:'join', name, pk[, paid, pack]} · {t:'s', p:[x,y,z,yaw,vx,vy,vz,flags]} · {t:'fin'} · {t:'use'} · {t:'pay', pay} (sim) · {t:'payreq', wallet} · {t:'paytx', tx} (solana) · {t:'ping'}
+// Servidor -> cliente:  lobby · round · slot · gone · snap · fin · end · full · refund · kicked · cancel · closed · paytx · payfail · prize · pong
 //
 // Salas PAGAS (valendo prêmio): entrar é grátis; com >= PAID_MIN jogadores o lobby trava, o preço do pacote é dividido entre todos (fase 'pay');
 // quando todos pagam, a corrida começa SEM bots; o 1º a cruzar a linha leva o pacote. Se alguém não pagar a tempo (ou sair), os pagamentos são
@@ -42,6 +42,10 @@ const SPECIES = ['Pikachu', 'Charmander', 'Bulbasaur', 'Squirtle', 'Jigglypuff',
 const level7 = JSON.parse(fs.readFileSync(path.join(ROOT, 'levels/level7_moving.json'), 'utf8'));
 const LEVELS = makeLevels({ level7 });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+// pagamento real (USDC na Solana) só quando PAYMENT_MODE=solana; padrão: simulado
+let SOL = null;
+if (PAYMENT_MODE === 'solana') { SOL = await import('./solana.js'); const si = await SOL.init(); log(`SOLANA ${si.network} | house ${si.house} | SOL ${si.sol} USDC ${si.usdc} | gacha ${si.gacha}`); }
+const friendlyErr = e => { const m = String(e && e.message || e); return /insufficient|0x1\b/i.test(m) ? 'Not enough USDC in your wallet' : /AccountNotFound|could not find account|InvalidAccountData|0xbc4/i.test(m) ? 'Your wallet has no USDC account yet' : /blockhash|expired/i.test(m) ? 'The payment expired, try again' : m.slice(0, 120); };
 
 // ------------------------------------------------------------------ arquivos estáticos
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.wav': 'audio/wav', '.obj': 'text/plain; charset=utf-8', '.ico': 'image/x-icon' };
@@ -54,7 +58,7 @@ function serveStatic(req, res) {
   if (rel === '') rel = 'index.html';
   if (rel === 'health') { res.writeHead(200); return res.end('ok'); }
   if (rel === 'favicon.ico') { res.writeHead(204); return res.end(); }
-  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
+  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
   if (rel.includes('..') || !(PUBLIC_ROOT.has(rel) || PUBLIC_DIRS.some(d => rel.startsWith(d)))) { res.writeHead(404); return res.end('not found'); }
   const file = path.join(ROOT, rel), ext = path.extname(file).toLowerCase();
   fs.stat(file, (err, st) => {
@@ -133,6 +137,7 @@ class Room {
       else { r.name = SPECIES[r.pk % SPECIES.length]; r.node = nearestNodeAhead(this.world, r); r.vel.x = r.vel.z = 0; this.broadcast({ t: 'slot', i: r.i, name: r.name, pk: r.pk, bot: true }); }
     }
     log(`room ${this.id}: ${c.name} left (${this.humans()} humans)`);
+    if (this.paid && this.phase === 'pay' && c.paid) this.refundClient(c, 'You left the lobby');
     if (this.humans() === 0) this.destroy();
     else if (this.paid && this.phase === 'pay') this.relock(`${c.name} left`);
     else if (this.phase === 'lobby') this.sendLobby();
@@ -143,18 +148,48 @@ class Room {
   // ---- sala paga: travar lobby, cobrar, devolver
   lockPay() {
     const n = this.humans(); this.phase = 'pay'; this.share = shareFor(this.pack, n); this.payLeft = PAY_WINDOW;
-    for (const c of this.clients) c.paid = false;
+    for (const c of this.clients) { c.paid = false; c.payExp = null; c.submitting = false; }
     log(`room ${this.id}: LOCK ${n} players, ${this.pack.code} $${this.pack.usd} -> $${this.share} each`);
     this.sendLobby();
   }
-  onPay(c, m) {
-    if (!this.paid || this.phase !== 'pay' || c.paid || !payOk(m)) return;
+  onPay(c, m) {   // pagamento SIMULADO
+    if (!this.paid || PAYMENT_MODE !== 'sim' || this.phase !== 'pay' || c.paid || !payOk(m)) return;
     c.paid = true; c.payRef = String(m.pay).slice(0, 64); c.amount = this.share;
     log(`PAY room ${this.id}: ${c.name} paid $${this.share} (${PAYMENT_MODE}) ref ${c.payRef}`);
-    if ([...this.clients].every(x => x.paid)) { log(`room ${this.id}: all paid, starting`); this.startRound(); } else this.sendLobby();
+    this.afterPay();
+  }
+  afterPay() { if ([...this.clients].every(x => x.paid)) { log(`room ${this.id}: all paid, starting`); this.startRound(); } else this.sendLobby(); }
+  onPayReq(c, m) {   // SOLANA: monta a transação para o jogador assinar
+    if (!this.paid || PAYMENT_MODE !== 'solana' || this.phase !== 'pay' || c.paid || c.submitting || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(m.wallet || ''))) return;
+    c.wallet = String(m.wallet); const share = this.share;
+    SOL.buildPayTx(c.wallet, share, `PR:${this.id}:${c.id}`).then(b => {
+      if (this.dead || this.phase !== 'pay' || this.share !== share) return;
+      c.payExp = { message: b.message, blockhash: b.blockhash, lastValidBlockHeight: b.lastValidBlockHeight, payer: c.wallet, share };
+      send(c, { t: 'paytx', tx: b.tx, amount: share });
+    }).catch(e => { log(`room ${this.id}: payreq failed for ${c.name}: ${e.message}`); send(c, { t: 'payfail', reason: friendlyErr(e) }); });
+  }
+  onPayTx(c, m) {   // SOLANA: recebe a transação assinada, confere e envia
+    if (!this.paid || PAYMENT_MODE !== 'solana' || this.phase !== 'pay' || c.paid || c.submitting || !c.payExp || typeof m.tx !== 'string' || m.tx.length > 4000) return;
+    c.submitting = true; const exp = c.payExp;
+    SOL.submitPayTx(m.tx, exp).then(sig => {
+      c.submitting = false; c.payExp = null;
+      if (this.dead || this.phase !== 'pay' || c.room !== this || this.share !== exp.share) {   // o dinheiro já saiu, mas a sala mudou: devolve
+        log(`room ${this.id}: LATE PAY from ${c.name} ${exp.payer} $${exp.share} sig ${sig} - refunding`); c.amount = exp.share; this.refundClient(c, 'The lobby changed while you were paying', exp.payer); return;
+      }
+      c.paid = true; c.payRef = sig; c.amount = exp.share;
+      log(`PAY room ${this.id}: ${c.name} ${exp.payer} paid $${exp.share} (solana) sig ${sig}`);
+      this.afterPay();
+    }).catch(e => { c.submitting = false; c.payExp = null; log(`room ${this.id}: pay failed for ${c.name}: ${e.message}`); send(c, { t: 'payfail', reason: friendlyErr(e) }); });
+  }
+  refundClient(c, reason, wallet) {   // devolve o que o jogador pagou (simulado: só registra)
+    const amount = c.amount, to = wallet || c.wallet; c.paid = false;
+    if (PAYMENT_MODE === 'solana' && to) {
+      SOL.refund(to, amount, `PR-refund:${this.id}:${c.id}`).then(sig => { log(`REFUND room ${this.id}: ${c.name} $${amount} -> ${to} sig ${sig} - ${reason}`); send(c, { t: 'refund', amount, reason, sig }); })
+        .catch(e => log(`REFUND FAILED room ${this.id}: ${c.name} ${to} $${amount} - ${e.message}  (devolver manualmente!)`));
+    } else { send(c, { t: 'refund', amount, reason }); log(`REFUND room ${this.id}: ${c.name} $${amount} (${PAYMENT_MODE}) - ${reason}`); }
   }
   relock(reason) {   // devolve o que já foi pago e reabre o lobby (o preço precisa ser recalculado)
-    for (const c of this.clients) if (c.paid) { send(c, { t: 'refund', amount: c.amount, reason }); log(`REFUND room ${this.id}: ${c.name} $${c.amount} (${PAYMENT_MODE}) - ${reason}`); c.paid = false; }
+    for (const c of this.clients) { c.payExp = null; if (c.paid) this.refundClient(c, reason); }
     this.phase = 'lobby'; this.startLeft = Math.min(PAID_START, 10); this.waitLeft = PAID_WAIT; this.payLeft = 0;
     this.sendLobby();
   }
@@ -164,6 +199,19 @@ class Room {
       this.slots[c.slot] = null; this.clients.delete(c); c.room = null; send(c, { t: 'kicked', reason: 'You did not pay in time' }); setTimeout(() => { try { c.ws.close(); } catch { /* ignore */ } }, 300);
     }
     if (this.humans() === 0) this.destroy(); else this.relock('Someone did not pay in time');
+  }
+  awardPrize() {
+    const w = this.winner, pack = this.pack;
+    if (PAYMENT_MODE !== 'solana' || !w || !w.wallet) { log(`PRIZE room ${this.id}: manual delivery needed (${PAYMENT_MODE}) winner ${w && w.name} pack ${pack.code}`); return; }
+    this.prizePending = true; this.broadcast({ t: 'prize', status: 'buying', pack, winner: w.i });
+    log(`PRIZE room ${this.id}: buying ${pack.code} for ${w.name} ${w.wallet}`);
+    SOL.buyPack(pack.code, pack.usd, w.wallet).then(r => {
+      log(`PRIZE OK room ${this.id}: ${w.name} got "${r.name}" (${r.rarity}, insured $${r.insured}) nft ${r.nft} delivered=${r.delivered} memo ${r.memo}`);
+      this.broadcast({ t: 'prize', status: 'done', winner: w.i, name: r.name, rarity: r.rarity, insured: r.insured, image: r.image, nft: r.nft, delivered: r.delivered });
+    }).catch(e => {
+      log(`PRIZE FAILED room ${this.id}: winner ${w.name} ${w.wallet} pack ${pack.code} - ${e.message}  (entregar manualmente!)`);
+      this.broadcast({ t: 'prize', status: 'failed', winner: w.i });
+    }).finally(() => { this.prizePending = false; this.resultsLeft = Math.max(this.resultsLeft, 12); });
   }
   cancelPaid() {
     log(`room ${this.id}: cancelled (not enough players)`);
@@ -183,7 +231,7 @@ class Room {
       const m = { t: 'lobby', level: this.levelIndex, left: Math.max(0, this.lobbyLeft), you: c.slot, slots: this.slotsInfo() };
       if (this.paid) {
         const stage = this.phase === 'pay' ? 'pay' : n >= PAID_MIN ? 'lock' : 'wait';
-        m.paid = { stage, pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
+        m.paid = { stage, mode: PAYMENT_MODE, pack: this.pack, min: PAID_MIN, n, est: n >= PAID_MIN ? shareFor(this.pack, n) : null, share: this.share, paidCount: [...this.clients].filter(x => x.paid).length, youPaid: !!c.paid };
         m.left = Math.max(0, stage === 'pay' ? this.payLeft : stage === 'lock' ? this.startLeft : this.waitLeft);
       }
       send(c, m);
@@ -207,7 +255,7 @@ class Room {
     this.nextLevel = null; this.buildWorld();
     const used = new Set(this.slots.filter(r => r && r.human).map(r => r.pk));
     const free = SPECIES.map((_, k) => k).filter(k => !used.has(k)); for (let k = free.length - 1; k > 0; k--) { const j = rand(k + 1); [free[k], free[j]] = [free[j], free[k]]; }
-    if (this.paid) { this.starters = this.humans(); this.winner = null; for (const h of this.slots) if (h && h.human) { h.adv = 120; h.lastStateT = 0; h.sus = 0; } }
+    if (this.paid) { this.starters = this.humans(); this.winner = null; for (const h of this.slots) if (h && h.human) { h.adv = 120; h.lastStateT = 0; h.sus = 0; h.wallet = h.human.wallet || ''; h.payRef = h.human.payRef; } }
     for (let i = 0; i < SLOTS; i++) {
       let r = this.slots[i];
       if (this.paid && (!r || !r.human)) { this.slots[i] = null; continue; }
@@ -241,7 +289,8 @@ class Room {
     if (this.paid) {
       const w = this.winner;
       if (w) log(`PAID RESULT room ${this.id}: winner "${w.name}" (ref ${w.human ? w.human.payRef : '-'}) gets ${this.pack.code} - pool ${this.starters} x $${this.share}`);
-      else { log(`PAID RESULT room ${this.id}: nobody finished - REFUND all`); for (const c of this.clients) send(c, { t: 'refund', amount: c.amount, reason: 'Nobody finished the race' }); }
+      else { log(`PAID RESULT room ${this.id}: nobody finished - REFUND all`); for (const c of this.clients) this.refundClient(c, 'Nobody finished the race'); }
+      if (w) this.awardPrize();
     }
     this.broadcast(this.endMsg(false));
     log(`room ${this.id}: round over (${this.finishedCount} finished)${this.paid ? '' : `; next "${LEVELS[this.nextLevel].name}"`}`);
@@ -302,7 +351,7 @@ class Room {
       }
     } else if (this.phase === 'results') {
       updateWorld(w, dt, []); this.resultsLeft -= dt;
-      if (this.resultsLeft <= 0) { if (this.paid) this.closePaid(); else this.startRound(); }
+      if (this.resultsLeft <= 0) { if (this.paid) { if (!this.prizePending) this.closePaid(); } else this.startRound(); }
     }
     this.sendAcc += dt;
     if (this.sendAcc >= 0.05) { this.sendAcc = 0; this.snapshot(); }
@@ -350,7 +399,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 });
 wss.on('connection', ws => {
-  const c = { ws, id: ++clientSeq, name: '', pk: 0, room: null, slot: -1, paid: false, payRef: '', amount: 0 };
+  const c = { ws, id: ++clientSeq, name: '', pk: 0, room: null, slot: -1, paid: false, payRef: '', amount: 0, wallet: '', submitting: false, payExp: null };
   ws.isAlive = true; ws.on('pong', () => { ws.isAlive = true; });
   ws.on('message', data => {
     let m; try { m = JSON.parse(data.toString()); } catch { return; }
@@ -363,6 +412,8 @@ wss.on('connection', ws => {
     else if (m.t === 'fin' && c.room) c.room.onFin(c, m.p);
     else if (m.t === 'use' && c.room) c.room.onUse(c);
     else if (m.t === 'pay' && c.room) c.room.onPay(c, m);
+    else if (m.t === 'payreq' && c.room) c.room.onPayReq(c, m);
+    else if (m.t === 'paytx' && c.room) c.room.onPayTx(c, m);
     else if (m.t === 'ping') send(c, { t: 'pong' });
   });
   ws.on('close', () => { if (c.room) c.room.removeHuman(c); });

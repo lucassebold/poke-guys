@@ -455,16 +455,23 @@ const resultsEl = $('results');
 function showResults(rows, nextName, secs, paid) {
   const you = player ? player.i : -1;
   let banner = '';
-  if (paid) banner = paid.winner ? `<div class="winner">🏆 ${paid.winner.i === you ? 'YOU WON' : esc(paid.winner.name) + ' wins'} the ${esc(paid.pack.label)}!<br><small style="font-size:13px;opacity:.85">Test mode — no real pack was bought</small></div>` : '<div class="winner">Nobody finished — everyone is refunded (test)</div>';
-  resultsEl.dataset.paid = paid ? '1' : '';
-  resultsEl.innerHTML = '<h2>Results</h2>' + banner + '<div class="next" id="nextInfo"></div><table>' + rows.map((r, k) =>
+  if (paid) banner = paid.winner ? `<div class="winner">🏆 ${paid.winner.i === you ? 'YOU WON' : esc(paid.winner.name) + ' wins'} the ${esc(paid.pack.label)}!<br><small style="font-size:13px;opacity:.85">${paidCfg && paidCfg.mode === 'solana' ? (paidCfg.network === 'devnet' ? 'Test network — this is a test card, no real money' : '') : 'Test mode — no real pack was bought'}</small></div>` : '<div class="winner">Nobody finished — everyone is refunded (test)</div>';
+  resultsEl.dataset.paid = paid ? '1' : ''; resultsEl.dataset.winner = paid && paid.winner ? String(paid.winner.i) : '';
+  resultsEl.innerHTML = '<h2>Results</h2>' + banner + '<div id="prizeInfo"></div><div class="next" id="nextInfo"></div><table>' + rows.map((r, k) =>
     `<tr class="${r.rank && r.rank <= CFG.qualifySlots ? 'q' : ''}${r.i === you ? ' you' : ''}"><td>${r.rank || '–'}</td><td>${esc(r.name)}</td><td>${r.rank ? '' : 'DNF'}${r.tm != null ? r.tm.toFixed(1) + 's' : ''}</td></tr>`).join('')
     + '</table>';
   resultsEl.style.display = 'block';
   nextAt = secs; resultsEl.dataset.next = nextName;
-  updateNextInfo();
+  updateNextInfo(); renderPrize();
 }
-function updateNextInfo() { const n = $('nextInfo'); if (n) n.textContent = resultsEl.dataset.paid ? `Back to the main screen in ${Math.max(0, Math.ceil(nextAt))}s` : `Next course: ${resultsEl.dataset.next} — ${Math.max(0, Math.ceil(nextAt))}s`; }
+function renderPrize() {   // carta ganha (modo solana): comprando -> entregue / falhou
+  const el = $('prizeInfo'), p = prizeState; if (!el || !p) return;
+  const you = player ? String(player.i) : '', mine = resultsEl.dataset.winner === you;
+  if (p.status === 'buying') el.innerHTML = '<div class="prize">Buying the prize pack… ⏳</div>';
+  else if (p.status === 'done') el.innerHTML = `<div class="prize done">${p.image ? `<img src="${esc(p.image)}" alt="card">` : ''}<b>${esc(p.name)}</b><span>${esc(p.rarity || '')}${p.insured ? ' · insured value $' + p.insured : ''}</span><small>${mine ? 'Sent to YOUR wallet!' : "Sent to the winner's wallet"}</small></div>`;
+  else el.innerHTML = '<div class="prize">Prize delivery failed — the host will deliver it manually.</div>';
+}
+function updateNextInfo() { const n = $('nextInfo'); if (n) n.textContent = resultsEl.dataset.paid ? (prizeState && prizeState.status === 'buying' ? 'Delivering the prize…' : `Back to the main screen in ${Math.max(0, Math.ceil(nextAt))}s`) : `Next course: ${resultsEl.dataset.next} — ${Math.max(0, Math.ceil(nextAt))}s`; }
 function hideResults() { resultsEl.style.display = 'none'; nextAt = 0; }
 
 // ---------- offline (prática) ----------
@@ -554,18 +561,59 @@ const snapBuf = [];
 function wsUrl() { const q = /[?&]server=([^&]+)/.exec(location.search); if (q) return decodeURIComponent(q[1]); return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'; }
 function closeNet() { if (net) { net.close(); net = null; } snapBuf.length = 0; }
 // ---------- salas pagas (pagamento simulado nesta versão) ----------
+// ---------- carteira Solana (Phantom ou compatível) ----------
+const WALLET = { provider: null, pubkey: null };
+let web3Promise = null, prizeState = null;
+function ensureWeb3() {   // biblioteca da Solana carregada só quando precisa (modo solana)
+  if (window.solanaWeb3) return Promise.resolve(window.solanaWeb3);
+  if (!web3Promise) web3Promise = new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = 'https://unpkg.com/@solana/web3.js@1.98.4/lib/index.iife.min.js';
+    sc.onload = () => res(window.solanaWeb3); sc.onerror = () => { web3Promise = null; rej(new Error('Could not load the Solana library')); }; document.head.appendChild(sc);
+  });
+  return web3Promise;
+}
+async function getWalletProvider() {
+  if (window.__testWalletSecret) {   // gancho para testes automatizados (carteira de teste em memória)
+    const w3 = await ensureWeb3(), kp = w3.Keypair.fromSecretKey(Uint8Array.from(window.__testWalletSecret));
+    return { publicKey: kp.publicKey, connect: async () => ({ publicKey: kp.publicKey }), signTransaction: async tx => { tx.partialSign(kp); return tx; } };
+  }
+  const p = (window.phantom && window.phantom.solana) || window.solana;
+  if (!p) throw new Error('No Solana wallet found — install Phantom (phantom.app)');
+  return p;
+}
+async function connectWallet() {
+  try { const p = await getWalletProvider(), r = await p.connect(); WALLET.provider = p; WALLET.pubkey = String((r && r.publicKey) || p.publicKey); }
+  catch (e) { toast(String(e && e.message || e).slice(0, 90), '#ff9a9a'); }
+  renderPaidBox();
+}
+const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
+const bytesToB64 = u => { let s = ''; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
+async function signAndReturn(b64) {   // recebe a transação montada pelo servidor, o jogador assina na carteira, devolvemos
+  try {
+    const w3 = await ensureWeb3(), tx = w3.Transaction.from(b64ToBytes(b64));
+    const signed = await WALLET.provider.signTransaction(tx);
+    if (net) net.send({ t: 'paytx', tx: bytesToB64(signed.serialize({ requireAllSignatures: false })) });
+    setPayMsg('Sending the payment…');
+  } catch (e) { setPayError(/reject|denied|cancel/i.test(String(e && e.message)) ? 'You cancelled the payment' : String(e && e.message || e).slice(0, 100)); }
+}
+function setPayMsg(t) { const m = $('payMsg'); if (m) { m.textContent = t; m.style.color = '#cfd8ff'; } }
+function setPayError(t) { const m = $('payMsg'), b = $('payNow'); if (m) { m.textContent = t; m.style.color = '#ff9a9a'; } if (b) b.disabled = false; }
 let paidMode = false, paidCfg = null, paidPack = 'pokemon_25', paidRound = null, payShown = false;
 const PAID_DEFAULT = { mode: 'sim', min: 2, packs: [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }] };
-fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; }).catch(() => { paidCfg = PAID_DEFAULT; });
+fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; if (paidMode) renderPaidBox(); }).catch(() => { paidCfg = PAID_DEFAULT; });
 const usd = v => '$' + (+v).toFixed(2);
 function packByCode(c) { return ((paidCfg || PAID_DEFAULT).packs.find(p => p.code === c)) || (paidCfg || PAID_DEFAULT).packs[0]; }
 function renderPaidBox() {
-  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT;
+  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT, real = cfg.mode === 'solana';
   box.style.display = paidMode ? 'block' : 'none'; if (!paidMode) return;
+  const netTxt = cfg.network === 'devnet' ? 'Solana <b>DEVNET</b> (test network — fake money, no real cost)' : 'Solana (real money!)';
   box.innerHTML = `<div><b>Pick the prize pack</b></div><div class="packs">${cfg.packs.map(p => `<button data-c="${p.code}" class="${p.code === paidPack ? 'sel' : ''}">${esc(p.label)} · ${usd(p.usd)}</button>`).join('')}</div>`
+    + (real ? `<div class="walletRow"><button id="walletBtn" class="${WALLET.pubkey ? 'ok' : ''}">${WALLET.pubkey ? '✓ ' + WALLET.pubkey.slice(0, 4) + '…' + WALLET.pubkey.slice(-4) : 'CONNECT WALLET'}</button><span>${netTxt}</span></div>` : '')
     + `<div class="rules">Joining is free. When at least ${cfg.min} players are in the lobby, it locks and the pack price is <b>split between everyone</b> (more players = cheaper).<br>`
-    + `Real players only, no bots. First to cross the finish line wins the pack. Payments are in <b>TEST mode</b> — no real money.</div>`;
-  box.querySelectorAll('button').forEach(b => b.onclick = () => { paidPack = b.dataset.c; renderPaidBox(); play('click', { vol: 0.5 }); });
+    + `Real players only, no bots. First to cross the finish line wins the pack${real ? ' — it is sent straight to the winner\'s wallet. You pay in <b>USDC</b> from your wallet (no SOL needed).' : '. Payments are in <b>TEST mode</b> — no real money.'}</div>`;
+  box.querySelectorAll('.packs button').forEach(b => b.onclick = () => { paidPack = b.dataset.c; renderPaidBox(); play('click', { vol: 0.5 }); });
+  const wb = $('walletBtn'); if (wb) wb.onclick = () => connectWallet();
+  $('playBtn').disabled = real && !WALLET.pubkey;
 }
 function showMode() {
   $('mode').style.display = 'block'; homeEl.style.display = 'none'; $('payBox').style.display = 'none'; paidMode = false;
@@ -574,18 +622,22 @@ function enterHome(paid) {
   paidMode = paid; $('mode').style.display = 'none'; homeEl.style.display = 'block';
   $('playBtn').textContent = paid ? 'FIND A PRIZE RACE' : 'PLAY'; $('practiceBtn').style.display = paid ? 'none' : '';
   const tip = homeEl.querySelector('.tip'); if (tip) tip.textContent = paid ? 'Pick your character (← → keys work too) · prize races are real players only — no bots' : 'Pick your character (← → keys work too) · online races with up to 16 players, bots fill empty spots';
-  renderPaidBox(); play('click', { vol: 0.5 });
+  renderPaidBox(); if (!paid) $('playBtn').disabled = false; play('click', { vol: 0.5 });
 }
 let payKey = '';
 function showPayBox(p) {
   const box = $('payBox'); payShown = true;
   const key = `${p.youPaid}|${p.share}|${p.n}|${p.paidCount}`;
   if (key !== payKey || box.style.display !== 'block') {   // só reconstrói quando algo mudou (senão o clique no botão se perde)
-    payKey = key;
+    payKey = key; const real = p.mode === 'solana';
     if (p.youPaid) box.innerHTML = `<h2>Payment received ✓</h2><div class="big">${p.paidCount}/${p.n}</div><div class="row">Waiting for the other players to pay…</div><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div>`;
-    else box.innerHTML = `<h2>Lobby locked — ${p.n} players</h2><div class="row">Prize: <b>${esc(p.pack.label)}</b> (${usd(p.pack.usd)})</div><div class="row">Split ${p.n} ways — your share:</div><div class="big">${usd(p.share)}</div><button id="payNow">PAY ${usd(p.share)}</button><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div><div class="test">TEST MODE — no real money is charged</div>`;
+    else box.innerHTML = `<h2>Lobby locked — ${p.n} players</h2><div class="row">Prize: <b>${esc(p.pack.label)}</b> (${usd(p.pack.usd)})</div><div class="row">Split ${p.n} ways — your share:</div><div class="big">${usd(p.share)}${real ? ' <small style="font-size:20px">USDC</small>' : ''}</div><button id="payNow">PAY ${usd(p.share)}</button><div class="row" id="payMsg"></div><div class="row">Time left: <span id="payT">${Math.max(0, Math.ceil(lobbyInfo.left))}</span>s</div><div class="test">${real ? 'TEST NETWORK (devnet) — fake money, no real cost' : 'TEST MODE — no real money is charged'}</div>`;
     box.style.display = 'block';
-    const b = $('payNow'); if (b) b.onclick = () => { if (net) net.send({ t: 'pay', pay: 'SIM:' + Math.random().toString(36).slice(2, 10) }); b.disabled = true; play('click', { vol: 0.6 }); };
+    const b = $('payNow'); if (b) b.onclick = () => {
+      play('click', { vol: 0.6 }); b.disabled = true;
+      if (real) { if (!WALLET.pubkey) { setPayError('Connect your wallet first'); return; } setPayMsg('Preparing the payment…'); if (net) net.send({ t: 'payreq', wallet: WALLET.pubkey }); }
+      else if (net) net.send({ t: 'pay', pay: 'SIM:' + Math.random().toString(36).slice(2, 10) });
+    };
   }
 }
 function hidePayBox() { $('payBox').style.display = 'none'; payShown = false; payKey = ''; }
@@ -593,7 +645,7 @@ function goOnline() {
   unlock(); const nm = $('nameIn').value.trim().slice(0, 14); CHOICE.name = nm;
   try { localStorage.setItem('sl_name', nm); localStorage.setItem('sl_pk', String(CHOICE.pk)); } catch { /* ignore */ }
   $('home').style.display = 'none'; menuEl.style.display = 'none'; hideResults();
-  mode = 'online'; state = 'connecting'; msg.innerHTML = 'Connecting…'; paidRound = null; hidePayBox();
+  mode = 'online'; state = 'connecting'; msg.innerHTML = 'Connecting…'; paidRound = null; prizeState = null; hidePayBox();
   clearRacers(); snapBuf.length = 0;
   net = openSocket(wsUrl(), {
     open() { net.send(paidMode ? { t: 'join', name: CHOICE.name, pk: CHOICE.pk, paid: true, pack: paidPack } : { t: 'join', name: CHOICE.name, pk: CHOICE.pk }); },
@@ -628,10 +680,16 @@ function onNetMsg(m) {
     paidRound = m.paid || null; hidePayBox();
     hideResults(); spec.active = false; spec.index = 0; msg.textContent = ''; msgTimer = 0; snapBuf.length = 0; camYaw = 0;
     startAmbient(); if (m.phase === 'countdown') play('count', { vol: 0.9 });
+  } else if (m.t === 'paytx') {
+    setPayMsg('Approve the payment in your wallet…'); signAndReturn(m.tx);
+  } else if (m.t === 'payfail') {
+    setPayError(m.reason || 'Payment failed');
+  } else if (m.t === 'prize') {
+    prizeState = m; renderPrize();
   } else if (m.t === 'gone') {
     const r = byIdx.get(m.i); if (r && !r.local) { disposeRacer(r); racers.splice(racers.indexOf(r), 1); byIdx.delete(m.i); }
   } else if (m.t === 'refund') {
-    hidePayBox(); toast(`Refunded ${usd(m.amount)} (test) — ${m.reason}`, '#7dd3ff');
+    hidePayBox(); toast(`Refunded ${usd(m.amount)}${m.sig ? '' : ' (test)'} — ${m.reason}`, '#7dd3ff');
   } else if (m.t === 'kicked' || m.t === 'cancel') {
     hidePayBox(); closeNet(); msg.innerHTML = `${m.t === 'kicked' ? 'Removed from the lobby' : 'Race cancelled'}<small>${esc(m.reason || '')} — returning to the main screen…</small>`; setTimeout(goHome, 3200);
   } else if (m.t === 'closed') {

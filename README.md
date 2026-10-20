@@ -54,4 +54,11 @@ Tela inicial: **Play free** ou **Play for prize**. Na sala paga entrar é gráti
 Quem não paga a tempo é removido e os pagamentos são devolvidos (o preço é recalculado). Sem 2 jogadores em 90 s a sala cancela.
 Variáveis: `PAID_MIN`, `PAID_WAIT`, `PAID_START`, `PAY_WINDOW`, `PAYMENT_MODE` (só `sim` por enquanto). O histórico (PAY / REFUND / WINNER / SUSPECT) vai para os logs do servidor.
 Antitrapaça nas salas pagas: orçamento de avanço por segundo, tempo mínimo de corrida e posição de chegada vinda só de atualizações validadas.
-Pendente: pagamento real em Solana (USDC/SOL), compra do pacote no Collector Crypt e envio ao vencedor.
+
+### Modo Solana (`PAYMENT_MODE=solana`) — DEVNET por padrão (moeda de teste, sem custo)
+- O jogador conecta a carteira (Phantom) e paga **USDC** assinando uma transação montada pelo servidor; a **taxa de rede é paga pela casa** (o jogador não precisa de SOL).
+- Reembolsos são transferências reais da casa para o jogador. O prêmio é comprado na API do Collector Crypt (`dev-gacha` na devnet) e a carta vai **direto para a carteira do vencedor** (`altPlayerAddress`).
+- Variáveis: `PAYMENT_MODE=solana`, `SOLANA_NETWORK=devnet`, `HOUSE_SECRET_KEY` (JSON com os 64 bytes da chave da casa) ou `HOUSE_KEY_FILE`, opcionais `SOLANA_RPC_URL`, `GACHA_API_KEY`, `MAX_PACK_USD` (teto por prêmio, padrão 100).
+- A casa precisa de **USDC de teste** (mint `Gh9Zw…tKJr`, torneira: spl-token-faucet.com) e de um pouco de **SOL de teste** (faucet.solana.com).
+- **Mainnet (dinheiro real) está BLOQUEADA**: só liga com `SOLANA_NETWORK=mainnet-beta` **e** `ALLOW_MAINNET=yes`. Não use sem checar a parte legal.
+- Logs (Railway): `PAY`, `REFUND`, `REFUND FAILED` (devolver manualmente!), `PRIZE OK`, `PRIZE FAILED` (entregar manualmente!), `SUSPECT`.
