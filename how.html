@@ -60,7 +60,7 @@ code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-brea
   <div class="testbanner" id="testBanner">⚠ This server is on the <b>Solana test network</b>: prize races use fake test money and test cards.</div>
 </header>
 
-<nav><a href="#game">The game</a><a href="#controls">Controls</a><a href="#course">Obstacles</a><a href="#powers">Power-ups</a><a href="#free">Play free</a><a href="#prize">Play for prize</a><a href="#fair">Safety &amp; fairness</a><a href="#faq">FAQ</a></nav>
+<nav><a href="#game">The game</a><a href="#controls">Controls</a><a href="#course">Obstacles</a><a href="#powers">Power-ups</a><a href="#free">Play free</a><a href="#prize">Play for prize</a></nav>
 
 <section id="game">
   <h2>The game in 30 seconds<small>A fast, chaotic obstacle-course race for up to 16 players.</small></h2>
@@ -163,48 +163,7 @@ code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-brea
   </div>
 </section>
 
-<section id="fair">
-  <h2>Safety &amp; fairness<small>What happens when something goes wrong.</small></h2>
-  <div class="grid g2">
-    <div class="card"><h3 style="margin-top:0">↩ Automatic refunds</h3>
-      <ul style="margin:0;padding-left:18px;color:var(--mut)">
-        <li><b>Someone doesn't pay in time</b> (or leaves): they're removed, everyone who already paid is <b>refunded</b>, and the lobby reopens with the price recalculated.</li>
-        <li><b>Not enough players</b> after 90 seconds: the room is cancelled — nobody was charged.</li>
-        <li><b>Nobody finishes</b>: everyone is refunded.</li>
-        <li><b>The pack can't be bought</b> (store down, out of stock, price changed): everyone is <b>refunded automatically</b>.</li>
-      </ul></div>
-    <div class="card"><h3 style="margin-top:0">🔍 Everything is on-chain</h3>
-      <ul style="margin:0;padding-left:18px;color:var(--mut)">
-        <li>Every payment, refund and prize is a public Solana transaction anyone can check.</li>
-        <li>Every payment needs <b>your approval</b> in your wallet. The game can't take anything else.</li>
-        <li>The game wallet that receives the payments and buys the packs: <code id="houseAddr">—</code> <span id="houseLink"></span></li>
-      </ul></div>
-    <div class="card"><h3 style="margin-top:0">🛡 Fair racing</h3>
-      <ul style="margin:0;padding-left:18px;color:var(--mut)">
-        <li>The server decides who finished first, not your browser.</li>
-        <li>Suspicious movement (teleporting, impossible speed) is rejected and logged.</li>
-        <li>No bots in prize races, and power-ups favour players who are behind, not the leader.</li>
-      </ul></div>
-    <div class="card"><h3 style="margin-top:0">⚖ Play responsibly</h3>
-      <p style="margin:0;color:var(--mut)">Prize races involve real money. Only play with an amount you're comfortable spending, and check that prize games are allowed where you live — that's your responsibility.</p></div>
-  </div>
-</section>
-
-<section id="faq">
-  <h2>FAQ</h2>
-  <div class="card">
-    <details><summary>Do I need crypto experience?</summary><p>No, but you need a Solana wallet (Phantom is the easiest) with a few dollars in USDC. Free races need nothing at all.</p></details>
-    <details><summary>Why do I need USDC and not SOL?</summary><p>The prize pack is paid in USDC, so the split is in dollars and doesn't change with the SOL price. The tiny network fee is paid by the game, so you never need SOL.</p></details>
-    <details><summary>What if I disconnect during a prize race?</summary><p>Leaving a prize race after it started counts as quitting: your share is not refunded, because the race and the prize go on with the other players. In free races a bot simply takes over.</p></details>
-    <details><summary>Can I join a prize race that already started?</summary><p>No. Prize lobbies close when the price is split, so everyone pays the same and starts together.</p></details>
-    <details><summary>What if two people cross the line almost together?</summary><p>The server records the order in which the finish is registered; the first one is the winner.</p></details>
-    <details><summary>Is this safe for my wallet?</summary><p>Connecting shares only your public address. You approve every payment individually and the transaction shows the amount (USDC) and the receiving wallet. Never share your recovery phrase with anyone — the game never asks for it.</p></details>
-    <details><summary>Where does my money go?</summary><p>Your share goes to the game wallet shown above, which pays for the pack<span id="feeFaq"></span>. If the race is cancelled or the pack can't be bought, it's refunded to the same wallet you paid from.</p></details>
-    <details><summary>Which characters are in the game?</summary><p>16 fan-made creatures. Poke Run is an independent fan project and is not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.</p></details>
-  </div>
-</section>
-
-<footer>Poke Run · <a href="/">Back to the game</a></footer>
+<footer>Poke Run · <a href="/">Back to the game</a><br><span style="opacity:.8">Independent fan project — not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.</span></footer>
 </div>
 <script>
 fetch('/paid/config').then(r => r.json()).then(c => {
@@ -212,10 +171,9 @@ fetch('/paid/config').then(r => r.json()).then(c => {
   const pack = (c.packs && c.packs[0]) || { label: 'Starter Pack', usd: 25 }, fee = +c.fee || 0, usd = v => '$' + v.toFixed(2);
   set('minP', c.min || 2); set('startS', c.start || 20); set('payS', c.payWindow || 60);
   set('packName', pack.label); set('packUsd', usd(+pack.usd));
-  if (fee) { set('feeTxt', ` plus a ${fee}% service fee`); set('feeFaq', ` and covers a small service fee (${fee}%)`); }
+  if (fee) set('feeTxt', ` plus a ${fee}% service fee`);
   const total = +pack.usd * (1 + fee / 100), rows = document.getElementById('priceRows'); rows.innerHTML = '';
   for (const n of [2, 3, 4, 6, 8, 12, 16]) { const share = Math.ceil(total * 100 / n) / 100; rows.insertAdjacentHTML('beforeend', `<tr><td class="n">${n} players</td><td><b>${usd(share)}</b> each</td><td>${usd(share * n)}</td></tr>`); }
-  if (c.house) { set('houseAddr', c.house); const real = c.network !== 'devnet'; document.getElementById('houseLink').innerHTML = `<a href="https://solscan.io/account/${c.house}${real ? '' : '?cluster=devnet'}" target="_blank" rel="noopener">view on Solscan ↗</a>`; }
   if (c.network === 'devnet') document.getElementById('testBanner').style.display = 'block';
   if (c.mode === 'sim') { document.getElementById('testBanner').style.display = 'block'; document.getElementById('testBanner').innerHTML = '⚠ Prize races on this server run in <b>simulation mode</b> (no real payments).'; }
 }).catch(() => {
