@@ -495,7 +495,7 @@ function startRoundOffline() {
   startAmbient(); play('count', { vol: 0.9 });
 }
 function startOffline(levelI) {
-  closeNet(); mode = 'offline';
+  closeNet(); mode = 'offline'; $('mode').style.display = 'none';
   if (levelI != null && levelI !== levelIndex) loadLevel(levelI);
   makeOfflineRacers(); menuSel = levelIndex; startRoundOffline();
 }
