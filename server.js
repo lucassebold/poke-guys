@@ -35,7 +35,10 @@ const PAID_START = +process.env.PAID_START || 20;     // com PAID_MIN jogadores:
 const PAY_WINDOW = +process.env.PAY_WINDOW || 60;     // tempo para todos pagarem depois de travar
 const PAID_GRACE = 10, PAID_RESULTS = 15, MAX_AVG_SPEED = 26;   // fim da corrida após o 1º, tempo na tela de resultado, teto de velocidade média (antitrapaça)
 const PAYMENT_MODE = String(process.env.PAYMENT_MODE || 'sim').trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
-const PACKS = [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }];   // só o pacote de US$ 25
+const envS = k => String(process.env[k] || '').trim().replace(/^["']+|["']+$/g, '').trim();
+// pacote do prêmio (um só). Padrão: Starter de US$ 25. Dá para trocar por variáveis: PACK_CODE (máquina do Collector Crypt), PACK_USD (preço), PACK_LABEL.
+// Se PACK_USD for MENOR que o preço real da máquina, a compra é recusada e todos são reembolsados (serve para testar pagamento/reembolso por centavos).
+const PACKS = [{ code: envS('PACK_CODE') || 'pokemon_25', usd: +envS('PACK_USD') || 25, label: envS('PACK_LABEL') || 'Starter Pack' }];
 let FEE_PCT = +process.env.HOUSE_FEE_PCT || 0;   // taxa de serviço (%) somada ao preço do pacote (padrão 5% na mainnet)
 const shareFor = (pack, n) => Math.ceil(pack.usd * (1 + FEE_PCT / 100) * 100 / n) / 100;   // preço do pacote (+ taxa) dividido entre os n jogadores, arredondado para cima
 const payOk = m => PAYMENT_MODE === 'sim' && typeof m.pay === 'string' && m.pay.startsWith('SIM:');   // TODO: verificar pagamento real (Solana)

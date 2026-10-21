@@ -68,3 +68,7 @@ Só liga com `SOLANA_NETWORK=mainnet-beta` **e** `ALLOW_MAINNET=yes`. O RPC padr
 Travas: `HOUSE_FEE_PCT` (taxa de serviço somada ao preço do pacote; padrão 5% na mainnet), `MAX_PACK_USD` (padrão 25 na mainnet), `MAX_DAILY_PACK_USD` (padrão 50/dia), `MIN_HOUSE_SOL` (padrão 0.005; abaixo disso as salas pagas pausam), `MAX_PAID_ROOMS` (padrão 2),
 `PAID_ENABLED=no` (interruptor para pausar as salas pagas), `PRIZE_MODE=manual` (só registra o vencedor; você compra/entrega o pacote) ou `auto` (compra e entrega sozinho).
 Na tela da sala paga há só um aviso curto de que a carta é aleatória (sem tela de aceite). Carteira da casa: precisa de USDC (para reembolsos/pacote) e um pouco de SOL (taxas). Mantenha pouco saldo nela.
+
+### Trocar o pacote / testar barato
+`PACK_CODE`, `PACK_USD`, `PACK_LABEL` mudam o pacote do prêmio (padrão `pokemon_25` / 25 / Starter Pack). `PACK_CODE=eopoke_25` é um pacote Pokémon de US$ 25 com valor esperado 25 e recompra de 94% (o Starter tem 85%).
+Teste de pagamento/reembolso por centavos: `PACK_USD=0.5` + `PRIZE_MODE=manual` + `HOUSE_FEE_PCT=0` (não compra pacote; o dinheiro dos testes fica na casa). Se `PRIZE_MODE=auto` com `PACK_USD` abaixo do preço real, a compra é recusada e todos são reembolsados.
