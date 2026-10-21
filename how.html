@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>How it works · Poke Run</title>
+<style>
+:root{--bg:#12082e;--card:#241254;--card2:#1a0d40;--line:#ffffff22;--txt:#f1ecff;--mut:#b9aee0;--y:#ffcb05;--p:#ff4fa3;--c:#4fe3ff;--g:#5dff7a;--o:#ffb74d}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--txt);line-height:1.55;
+  background:radial-gradient(1200px 600px at 50% -10%,#4b1d9a55,transparent),linear-gradient(180deg,#2a1066,#12082e 420px) fixed var(--bg)}
+a{color:var(--c)}
+.wrap{max-width:980px;margin:0 auto;padding:0 18px 60px}
+header{text-align:center;padding:34px 0 8px}
+h1.logo{margin:0;font-size:clamp(40px,8vw,72px);font-weight:900;letter-spacing:3px;background:linear-gradient(90deg,var(--y),var(--p),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 #1a0d2e) drop-shadow(0 0 18px #ff4fa388)}
+header p{margin:6px 0 0;color:var(--mut);font-size:18px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:20px 0 6px}
+.btn{display:inline-block;padding:12px 26px;border-radius:14px;font-weight:900;font-size:18px;text-decoration:none;color:#fff}
+.btn.free{background:linear-gradient(180deg,#5dff7a,#1fc24a);box-shadow:0 5px 0 #0f7a2b}
+.btn.paid{background:linear-gradient(180deg,#ffd84f,#ff8a1a);color:#2a1055;box-shadow:0 5px 0 #a64b00}
+nav{position:sticky;top:0;z-index:5;margin:18px -18px 0;padding:10px 18px;background:#12082ecc;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;gap:6px 16px;flex-wrap:wrap;justify-content:center;font-size:14px;font-weight:700}
+nav a{text-decoration:none;color:var(--mut)}nav a:hover{color:#fff}
+section{margin-top:38px}
+h2{font-size:28px;margin:0 0 12px;font-weight:900}
+h2 small{display:block;font-size:14px;color:var(--mut);font-weight:600;margin-top:2px}
+h3{margin:18px 0 6px;font-size:18px;color:var(--y)}
+.card{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:18px;padding:18px 20px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;background:#ffffff1a;font-size:12px;font-weight:800;color:var(--mut)}
+.step{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
+.step:last-child{border:0}
+.num{flex:none;width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--y),var(--p));color:#2a1055;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:18px}
+.step>div>b{display:block;font-size:17px}
+.step span{color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+td.n{font-weight:900;white-space:nowrap}
+kbd{display:inline-block;min-width:26px;padding:1px 8px;border-radius:7px;background:#fff;color:#2a1055;font-weight:800;font-size:13px;text-align:center;box-shadow:0 2px 0 #0006}
+.pw{display:flex;gap:12px;align-items:flex-start}
+.pw .ic{font-size:34px;line-height:1;filter:drop-shadow(0 0 8px var(--c2,#fff8))}
+.pw>div>b{display:block}
+.pw span{color:var(--mut);font-size:14px}
+.note{border:2px solid var(--o);background:#ff8a0018;border-radius:14px;padding:12px 16px;margin:14px 0;font-size:15px}
+.ok{border-color:var(--g);background:#1fc24a14}
+.testbanner{display:none;margin:16px 0 0;padding:10px 14px;border-radius:12px;background:#4fe3ff22;border:2px solid var(--c);font-weight:700;text-align:center}
+details{border-bottom:1px solid var(--line);padding:10px 0}
+details summary{cursor:pointer;font-weight:800;font-size:16px}
+details p{margin:8px 0 2px;color:var(--mut)}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin:10px 0 2px}
+.flow div{padding:8px 12px;border-radius:12px;background:#ffffff14;border:1px solid var(--line);font-weight:700;font-size:14px}
+.flow i{color:var(--y);font-style:normal;font-weight:900}
+footer{margin-top:50px;text-align:center;color:var(--mut);font-size:13px}
+code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-break:break-all}
+</style></head><body><div class="wrap">
+
+<header>
+  <h1 class="logo">POKE RUN</h1>
+  <p>How it works</p>
+  <div class="cta"><a class="btn free" href="/">▶ Play free</a><a class="btn paid" href="/">🏆 Play for prize</a></div>
+  <div class="testbanner" id="testBanner">⚠ This server is on the <b>Solana test network</b>: prize races use fake test money and test cards.</div>
+</header>
+
+<nav><a href="#game">The game</a><a href="#controls">Controls</a><a href="#course">Obstacles</a><a href="#powers">Power-ups</a><a href="#free">Play free</a><a href="#prize">Play for prize</a><a href="#fair">Safety &amp; fairness</a><a href="#faq">FAQ</a></nav>
+
+<section id="game">
+  <h2>The game in 30 seconds<small>A fast, chaotic obstacle-course race for up to 16 players.</small></h2>
+  <div class="card">
+    <p style="margin-top:0">Pick your character, join a race and run to the finish line as fast as you can. Along the way you dodge spinning hammers, bounce off bumpers, ride conveyor belts and slides, cross ice and falling tiles — and grab <b>power-up boxes</b> to slow down, swap with or kick the racers ahead of you.</p>
+    <div class="grid g3">
+      <div><h3>🏁 Goal</h3>Cross the finish line before the others. In free races the first <b>8</b> to finish qualify; the rest are out of that round.</div>
+      <div><h3>👥 Up to 16 players</h3>Play with friends online. In free races, bots fill the empty spots so the race is always full.</div>
+      <div><h3>🔁 Round after round</h3>After the results table, the next course starts automatically. Courses are long and each one mixes different obstacles and slides.</div>
+    </div>
+  </div>
+</section>
+
+<section id="controls">
+  <h2>Controls</h2>
+  <div class="card"><table>
+    <tr><td class="n"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</td><td>Run in any direction (relative to the camera)</td></tr>
+    <tr><td class="n"><kbd>Space</kbd></td><td>Jump</td></tr>
+    <tr><td class="n"><kbd>Shift</kbd> / <kbd>E</kbd></td><td>Dive forward — fast, but you can't steer for a moment</td></tr>
+    <tr><td class="n"><kbd>F</kbd> / <kbd>Enter</kbd></td><td>Use the power-up you're holding</td></tr>
+    <tr><td class="n">Mouse drag / <kbd>Q</kbd><kbd>Z</kbd></td><td>Rotate the camera</td></tr>
+    <tr><td class="n"><kbd>V</kbd></td><td>Switch visual effects between high and low (low is better on slow computers)</td></tr>
+  </table></div>
+</section>
+
+<section id="course">
+  <h2>Obstacles<small>Every course is a different mix.</small></h2>
+  <div class="grid g3">
+    <div class="card"><h3 style="margin-top:0">🔨 Hammers</h3>Spinning bars knock you back. Time your jump over low bars or wait for a gap.</div>
+    <div class="card"><h3 style="margin-top:0">🟠 Bumpers</h3>Bouncy pads that launch you sideways. Great for chaos, terrible for your line.</div>
+    <div class="card"><h3 style="margin-top:0">🎢 Slides</h3>Climb a trampoline, then slide down at high speed — with bumpers and hammers waiting on the way.</div>
+    <div class="card"><h3 style="margin-top:0">➡ Conveyors</h3>Moving belts that carry you (usually forward — sometimes with a surprise).</div>
+    <div class="card"><h3 style="margin-top:0">🧊 Ice &amp; moving blocks</h3>Slippery floors and platforms that slide across your path.</div>
+    <div class="card"><h3 style="margin-top:0">🟦 Falling tiles</h3>Tiles drop shortly after you step on them. Don't stop.</div>
+  </div>
+  <div class="note ok" style="margin-top:14px"><b>Fall off? No problem.</b> You respawn at the last <b>checkpoint</b> you passed (the flags on the rest platforms).</div>
+</section>
+
+<section id="powers">
+  <h2>Power-ups<small>Glowing <b>?</b> boxes appear along the track, roughly every 40 m. First to touch one takes it, then it comes back after 15 seconds.</small></h2>
+  <div class="grid g2">
+    <div class="card pw"><div class="ic">👅</div><div><b>Tongue Swap</b><span>Grab the racer ahead of you and swap places with them.</span></div></div>
+    <div class="card pw"><div class="ic">🥾</div><div><b>Boot Kick</b><span>Kick the racer ahead off their path — they may fall off the map.</span></div></div>
+    <div class="card pw"><div class="ic">🟢</div><div><b>Slime</b><span>Slows the racer ahead for a few seconds.</span></div></div>
+    <div class="card pw"><div class="ic">🦘</div><div><b>Mega Jump</b><span>A huge leap over obstacles.</span></div></div>
+    <div class="card pw"><div class="ic">🚀</div><div><b>Turbo</b><span>A short burst of speed.</span></div></div>
+    <div class="card pw"><div class="ic">🛡️</div><div><b>Shield</b><span>Blocks the next hit that would stop you.</span></div></div>
+    <div class="card pw"><div class="ic">🍌</div><div><b>Banana</b><span>Drops a slippery trap behind you for whoever steps on it.</span></div></div>
+    <div class="card pw"><div class="ic">⚡</div><div><b>Thunder Clap</b><span>Stuns everyone close to you for a moment.</span></div></div>
+  </div>
+  <div class="note" style="margin-top:14px"><b>Balanced on purpose.</b> Racers further back are more likely to get the strong power-ups. Attack powers only work if there's someone ahead of you (otherwise you keep them), and a Shield blocks one hit.</div>
+</section>
+
+<section id="free">
+  <h2>Play free</h2>
+  <div class="card">
+    <div class="flow"><div>Choose character</div><i>→</i><div>Play</div><i>→</i><div>10 s lobby</div><i>→</i><div>Race (bots fill the spots)</div><i>→</i><div>Results</div><i>→</i><div>Next course</div></div>
+    <ul style="margin-bottom:0;color:var(--mut)">
+      <li>No account, no wallet, no payment. Just a name and a character.</li>
+      <li>You can join a race that's already running — you just start from the beginning.</li>
+      <li>If a player leaves, a bot takes over their character.</li>
+      <li>Want to practice alone? Use <b>Practice (offline)</b> on the main screen and pick any course.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="prize">
+  <h2>Play for prize<small>Real players only. The winner takes a card pack. Everyone shares the cost.</small></h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">In one sentence</h3>
+    <p style="margin:0">You and the other players <b>split the price of one card pack</b>; whoever finishes <b>first</b> wins it, and the card is sent <b>straight to their wallet</b>.</p>
+  </div>
+
+  <h3>Step by step</h3>
+  <div class="card">
+    <div class="step"><div class="num">1</div><div><b>Choose “Play for prize” and connect your wallet</b><span>You need a Solana wallet such as <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>. Connecting only shares your public address — the game never sees your secret keys.</span></div></div>
+    <div class="step"><div class="num">2</div><div><b>Join a lobby — it's free</b><span>Nothing is charged when you join. The lobby waits for at least <b id="minP">2</b> real players (up to 16). There are <b>no bots</b> in prize races.</span></div></div>
+    <div class="step"><div class="num">3</div><div><b>The lobby locks and the price is split</b><span>When there are enough players, you get <b id="startS">20</b> seconds for more to join (more players = cheaper for everyone). Then the lobby locks and the pack price is <b>divided between all players</b>.</span></div></div>
+    <div class="step"><div class="num">4</div><div><b>Everyone pays their share in USDC</b><span>You have <b id="payS">60</b> seconds to approve one payment in your wallet. You pay in <b>USDC</b> (a dollar-pegged coin) and you <b>don't need any SOL</b> — the game covers the network fee.</span></div></div>
+    <div class="step"><div class="num">5</div><div><b>Race!</b><span>When everyone has paid, the race starts. Same game, same controls — only real players, so every position counts.</span></div></div>
+    <div class="step"><div class="num">6</div><div><b>The winner gets the card</b><span>The first player to cross the finish line wins. The game buys the pack and the card is delivered <b>directly to the winner's wallet</b> — usually within seconds.</span></div></div>
+  </div>
+
+  <h3>What it costs</h3>
+  <div class="card">
+    <p style="margin-top:0">The prize is a <b id="packName">Starter Pack</b> from Collector Crypt (price <b id="packUsd">$25</b>)<span id="feeTxt"></span>. The total is split equally, rounded up to the next cent:</p>
+    <table><thead><tr><th>Players</th><th>You pay</th><th>Total collected</th></tr></thead><tbody id="priceRows"></tbody></table>
+    <p style="margin-bottom:0;color:var(--mut);font-size:14px">The price is fixed at the moment the lobby locks. Joining the lobby is always free.</p>
+  </div>
+
+  <h3>What you can win</h3>
+  <div class="card">
+    <p style="margin-top:0">Packs hold <b>one random card</b>, drawn with a provably fair random roll (verifiable on Collector Crypt). Most cards are common; some are rare and worth much more.</p>
+    <div class="note"><b>Important:</b> the card is random, so it can be worth <b>more or less</b> than what the pack costs. Winning is never a guaranteed profit.</div>
+    <ul style="margin-bottom:0;color:var(--mut)">
+      <li>The card is a digital collectible (NFT) backed by a real physical card stored in Collector Crypt's vault.</li>
+      <li>You can keep it, redeem the physical card (shipping) or sell it back to Collector Crypt within 72 hours for part of its insured value — all from <a href="https://collectorcrypt.com" target="_blank" rel="noopener">collectorcrypt.com</a> with your wallet.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="fair">
+  <h2>Safety &amp; fairness<small>What happens when something goes wrong.</small></h2>
+  <div class="grid g2">
+    <div class="card"><h3 style="margin-top:0">↩ Automatic refunds</h3>
+      <ul style="margin:0;padding-left:18px;color:var(--mut)">
+        <li><b>Someone doesn't pay in time</b> (or leaves): they're removed, everyone who already paid is <b>refunded</b>, and the lobby reopens with the price recalculated.</li>
+        <li><b>Not enough players</b> after 90 seconds: the room is cancelled — nobody was charged.</li>
+        <li><b>Nobody finishes</b>: everyone is refunded.</li>
+        <li><b>The pack can't be bought</b> (store down, out of stock, price changed): everyone is <b>refunded automatically</b>.</li>
+      </ul></div>
+    <div class="card"><h3 style="margin-top:0">🔍 Everything is on-chain</h3>
+      <ul style="margin:0;padding-left:18px;color:var(--mut)">
+        <li>Every payment, refund and prize is a public Solana transaction anyone can check.</li>
+        <li>Every payment needs <b>your approval</b> in your wallet. The game can't take anything else.</li>
+        <li>The game wallet that receives the payments and buys the packs: <code id="houseAddr">—</code> <span id="houseLink"></span></li>
+      </ul></div>
+    <div class="card"><h3 style="margin-top:0">🛡 Fair racing</h3>
+      <ul style="margin:0;padding-left:18px;color:var(--mut)">
+        <li>The server decides who finished first, not your browser.</li>
+        <li>Suspicious movement (teleporting, impossible speed) is rejected and logged.</li>
+        <li>No bots in prize races, and power-ups favour players who are behind, not the leader.</li>
+      </ul></div>
+    <div class="card"><h3 style="margin-top:0">⚖ Play responsibly</h3>
+      <p style="margin:0;color:var(--mut)">Prize races involve real money. Only play with an amount you're comfortable spending, and check that prize games are allowed where you live — that's your responsibility.</p></div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <div class="card">
+    <details><summary>Do I need crypto experience?</summary><p>No, but you need a Solana wallet (Phantom is the easiest) with a few dollars in USDC. Free races need nothing at all.</p></details>
+    <details><summary>Why do I need USDC and not SOL?</summary><p>The prize pack is paid in USDC, so the split is in dollars and doesn't change with the SOL price. The tiny network fee is paid by the game, so you never need SOL.</p></details>
+    <details><summary>What if I disconnect during a prize race?</summary><p>Leaving a prize race after it started counts as quitting: your share is not refunded, because the race and the prize go on with the other players. In free races a bot simply takes over.</p></details>
+    <details><summary>Can I join a prize race that already started?</summary><p>No. Prize lobbies close when the price is split, so everyone pays the same and starts together.</p></details>
+    <details><summary>What if two people cross the line almost together?</summary><p>The server records the order in which the finish is registered; the first one is the winner.</p></details>
+    <details><summary>Is this safe for my wallet?</summary><p>Connecting shares only your public address. You approve every payment individually and the transaction shows the amount (USDC) and the receiving wallet. Never share your recovery phrase with anyone — the game never asks for it.</p></details>
+    <details><summary>Where does my money go?</summary><p>Your share goes to the game wallet shown above, which pays for the pack<span id="feeFaq"></span>. If the race is cancelled or the pack can't be bought, it's refunded to the same wallet you paid from.</p></details>
+    <details><summary>Which characters are in the game?</summary><p>16 fan-made creatures. Poke Run is an independent fan project and is not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.</p></details>
+  </div>
+</section>
+
+<footer>Poke Run · <a href="/">Back to the game</a></footer>
+</div>
+<script>
+fetch('/paid/config').then(r => r.json()).then(c => {
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const pack = (c.packs && c.packs[0]) || { label: 'Starter Pack', usd: 25 }, fee = +c.fee || 0, usd = v => '$' + v.toFixed(2);
+  set('minP', c.min || 2); set('startS', c.start || 20); set('payS', c.payWindow || 60);
+  set('packName', pack.label); set('packUsd', usd(+pack.usd));
+  if (fee) { set('feeTxt', ` plus a ${fee}% service fee`); set('feeFaq', ` and covers a small service fee (${fee}%)`); }
+  const total = +pack.usd * (1 + fee / 100), rows = document.getElementById('priceRows'); rows.innerHTML = '';
+  for (const n of [2, 3, 4, 6, 8, 12, 16]) { const share = Math.ceil(total * 100 / n) / 100; rows.insertAdjacentHTML('beforeend', `<tr><td class="n">${n} players</td><td><b>${usd(share)}</b> each</td><td>${usd(share * n)}</td></tr>`); }
+  if (c.house) { set('houseAddr', c.house); const real = c.network !== 'devnet'; document.getElementById('houseLink').innerHTML = `<a href="https://solscan.io/account/${c.house}${real ? '' : '?cluster=devnet'}" target="_blank" rel="noopener">view on Solscan ↗</a>`; }
+  if (c.network === 'devnet') document.getElementById('testBanner').style.display = 'block';
+  if (c.mode === 'sim') { document.getElementById('testBanner').style.display = 'block'; document.getElementById('testBanner').innerHTML = '⚠ Prize races on this server run in <b>simulation mode</b> (no real payments).'; }
+}).catch(() => {
+  const rows = document.getElementById('priceRows');
+  for (const n of [2, 3, 4, 6, 8, 12, 16]) { const share = Math.ceil(2500 / n) / 100; rows.insertAdjacentHTML('beforeend', `<tr><td class="n">${n} players</td><td><b>$${share.toFixed(2)}</b> each</td><td>$${(share * n).toFixed(2)}</td></tr>`); }
+});
+</script>
+</body></html>

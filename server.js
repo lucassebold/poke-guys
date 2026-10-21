@@ -64,13 +64,14 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const GZ = new Set(['.html', '.js', '.json', '.obj', '.wav']);
 const gzCache = new Map();
 const PUBLIC_DIRS = ['assets/', 'shared/', 'levels/', 'addons/'];
-const PUBLIC_ROOT = new Set(['index.html', 'main.js', 'net.js', 'anim.js', 'env.js', 'pokemon.js', 'fx.js', 'OBJLoader.js', 'three.module.js']);
+const PUBLIC_ROOT = new Set(['index.html', 'how.html', 'main.js', 'net.js', 'anim.js', 'env.js', 'pokemon.js', 'fx.js', 'OBJLoader.js', 'three.module.js']);
 function serveStatic(req, res) {
   let rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '');
   if (rel === '') rel = 'index.html';
+  if (rel === 'how') rel = 'how.html';   // página "How it works"
   if (rel === 'health') { res.writeHead(200); return res.end('ok'); }
   if (rel === 'favicon.ico') { res.writeHead(204); return res.end(); }
-  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, real: !!(SOL && SOL.info().real), fee: FEE_PCT, paused: !PAID_ENABLED || !OPERATIONAL, prizeMode: PRIZE_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
+  if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, real: !!(SOL && SOL.info().real), house: SOL ? SOL.info().house : null, fee: FEE_PCT, paused: !PAID_ENABLED || !OPERATIONAL, prizeMode: PRIZE_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
   if (rel.includes('..') || !(PUBLIC_ROOT.has(rel) || PUBLIC_DIRS.some(d => rel.startsWith(d)))) { res.writeHead(404); return res.end('not found'); }
   const file = path.join(ROOT, rel), ext = path.extname(file).toLowerCase();
   fs.stat(file, (err, st) => {
