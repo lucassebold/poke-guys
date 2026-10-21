@@ -73,6 +73,7 @@ export async function buildPayTx(payerStr, usd, memo) {
   const payer = new PublicKey(payerStr), payerAta = getAssociatedTokenAddressSync(MINT, payer);
   const { blockhash, lastValidBlockHeight } = await firstOk(c => c.getLatestBlockhash('confirmed'));
   const tx = new Transaction({ feePayer: house.publicKey, blockhash, lastValidBlockHeight })
+    .add(createAssociatedTokenAccountIdempotentInstruction(house.publicKey, houseAta, house.publicKey, MINT))   // cria a conta de USDC da casa se ainda não existir (a casa paga ~0,002 SOL uma única vez)
     .add(createTransferCheckedInstruction(payerAta, MINT, houseAta, payer, units(usd), DECIMALS)).add(memoIx(memo));
   tx.partialSign(house);
   return { tx: tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'), message: tx.serializeMessage().toString('base64'), blockhash, lastValidBlockHeight };
