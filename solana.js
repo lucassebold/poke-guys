@@ -20,7 +20,7 @@ const MINT = new PublicKey(REAL ? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const DECIMALS = 6, MEMO = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 if (REAL && /api\.mainnet-beta\.solana\.com/.test(RPC)) throw new Error('O RPC público da Solana não serve para produção. Use um provedor (Helius, QuickNode...).');
 const MAX_PACK_USD = +env('MAX_PACK_USD') || (REAL ? 25 : 100);              // teto de gasto por prêmio
-const MAX_DAILY_USD = +env('MAX_DAILY_PACK_USD') || (REAL ? 50 : 1e9);       // teto de gasto por dia (zera ao reiniciar)
+const MAX_DAILY_USD = +env('MAX_DAILY_PACK_USD') || 1e9;                      // teto diário opcional (sem limite por padrão)
 const MIN_SOL = +env('MIN_HOUSE_SOL') || (REAL ? 0.005 : 0.0005);            // SOL mínimo na casa para pagar taxas de rede
 let spentDay = 0, dayKey = '';
 const dayCheck = usd => { const k = new Date().toISOString().slice(0, 10); if (k !== dayKey) { dayKey = k; spentDay = 0; } if (spentDay + usd > MAX_DAILY_USD) throw new Error(`Limite diário de compra de pacotes atingido (${spentDay}+${usd} > ${MAX_DAILY_USD})`); };
@@ -98,27 +98,41 @@ const gacha = async (path, body) => {
   return { status: r.status, body: j };
 };
 const ownerOfCoreAsset = async addr => { const a = await conn.getAccountInfo(new PublicKey(addr)); return a ? new PublicKey(a.data.subarray(1, 33)).toBase58() : null; };   // Metaplex Core: [key:1][owner:32]
+export class PrizeError extends Error { constructor(m, paid = false, memo = null) { super(m); this.paid = paid; this.memo = memo; } }   // paid=true: o pacote já foi pago (não dá para devolver sem abrir)
+const mapOpen = (o, memo, winnerStr) => ({ memo, nft: o.nft_address, name: o.nftWon?.content?.metadata?.name || 'Card', rarity: o.rarity, insured: o.insuredValue, image: o.nftWon?.content?.files?.[0]?.cdn_uri || o.nftWon?.content?.files?.[0]?.uri || null });
 export async function buyPack(packCode, usdPrice, winnerStr) {
-  if (usdPrice > MAX_PACK_USD) throw new Error(`Pacote de US$${usdPrice} acima do teto MAX_PACK_USD=${MAX_PACK_USD}`);
-  dayCheck(usdPrice);
-  new PublicKey(winnerStr);
-  const bal = await houseBalances(); if (bal.usdc < usdPrice) throw new Error(`Saldo USDC da casa insuficiente (${bal.usdc} < ${usdPrice})`);
-  const gen = await gacha('/api/generatePack', { playerAddress: house.publicKey.toBase58(), packType: packCode, altPlayerAddress: winnerStr });
-  if (gen.status !== 200 || !gen.body?.transaction) throw new Error('generatePack falhou: ' + gen.status + ' ' + JSON.stringify(gen.body).slice(0, 200));
-  const tx = VersionedTransaction.deserialize(Buffer.from(gen.body.transaction, 'base64')); tx.sign([house]);
-  const sub = await gacha('/api/submitTransaction', { signedTransaction: Buffer.from(tx.serialize()).toString('base64') });
-  if (sub.status !== 200 || !sub.body?.success) throw new Error('submitTransaction falhou: ' + sub.status + ' ' + JSON.stringify(sub.body).slice(0, 200));
-  let open = null;
-  for (let i = 0; i < 25; i++) {   // o pacote precisa ser aberto em até 2 h; normalmente é imediato
-    open = await gacha('/api/openPack', { memo: gen.body.memo });
-    if (open.body?.success && open.body.nft_address) break;
-    if (!/WAITING/.test(JSON.stringify(open.body))) throw new Error('openPack falhou: ' + open.status + ' ' + JSON.stringify(open.body).slice(0, 200));
-    await sleep(3000);
-  }
-  const o = open?.body; if (!o?.nft_address) throw new Error('openPack não confirmou a tempo (memo ' + gen.body.memo + ')');
+  if (usdPrice > MAX_PACK_USD) throw new PrizeError(`Pacote de US$${usdPrice} acima do teto MAX_PACK_USD=${MAX_PACK_USD}`);
+  try { dayCheck(usdPrice); new PublicKey(winnerStr); } catch (e) { throw new PrizeError(e.message); }
+  // 1) antes de pagar: a máquina existe, tem estoque e o preço é o esperado?
+  let mach = null; try { const r = await fetch(GACHA + '/api/machines', { signal: AbortSignal.timeout(15000) }); mach = (await r.json())?.machines?.find(m => m.code === packCode); } catch { /* tratado abaixo */ }
+  if (!mach) throw new PrizeError('Máquina ' + packCode + ' indisponível');
+  if (Number(mach.price) !== usdPrice) throw new PrizeError(`Preço mudou: ${mach.price} (esperado ${usdPrice})`);
+  if (mach.stock && Object.values(mach.stock).reduce((a, b) => a + (+b || 0), 0) <= 0) throw new PrizeError('Sem estoque em ' + packCode);
+  const bal = await houseBalances().catch(() => null); if (!bal || bal.usdc < usdPrice) throw new PrizeError(`Saldo USDC da casa insuficiente (${bal && bal.usdc} < ${usdPrice})`);
+  // 2) pede o pacote e paga
+  const gen = await gacha('/api/generatePack', { playerAddress: house.publicKey.toBase58(), packType: packCode, altPlayerAddress: winnerStr }).catch(e => { throw new PrizeError('generatePack: ' + e.message); });
+  if (gen.status !== 200 || !gen.body?.transaction) throw new PrizeError('generatePack falhou: ' + gen.status + ' ' + JSON.stringify(gen.body).slice(0, 200));
+  const memo = gen.body.memo, tx = VersionedTransaction.deserialize(Buffer.from(gen.body.transaction, 'base64')); tx.sign([house]);
+  let sub; try { sub = await gacha('/api/submitTransaction', { signedTransaction: Buffer.from(tx.serialize()).toString('base64') }); } catch (e) { throw new PrizeError('submitTransaction sem resposta: ' + e.message, true, memo); }   // pode ter pago: não devolver
+  if (sub.status !== 200 || !sub.body?.success) throw new PrizeError('submitTransaction falhou: ' + sub.status + ' ' + JSON.stringify(sub.body).slice(0, 200), sub.status >= 500, memo);
+  // 3) abre (depois de pago, só resta abrir)
+  const o = await openPack(memo, 25, 3000); if (!o) throw new PrizeError('openPack não confirmou a tempo', true, memo);
   await sleep(1500);
   let owner = null; try { owner = await ownerOfCoreAsset(o.nft_address); } catch { /* só para log */ }
   spentDay += usdPrice;
-  const f = o.nftWon?.content?.files?.[0];
-  return { memo: gen.body.memo, nft: o.nft_address, name: o.nftWon?.content?.metadata?.name || 'Card', rarity: o.rarity, insured: o.insuredValue, image: f?.cdn_uri || f?.uri || null, owner, delivered: owner === winnerStr };
+  return { ...mapOpen(o, memo, winnerStr), owner, delivered: owner === winnerStr };
+}
+async function openPack(memo, tries, everyMs) {
+  for (let i = 0; i < tries; i++) {
+    const r = await gacha('/api/openPack', { memo }).catch(() => null);
+    if (r && r.body?.success && r.body.nft_address) return r.body;
+    await sleep(everyMs);
+  }
+  return null;
+}
+// pacote já pago mas ainda não aberto: tenta por até ~100 min (o prazo da API é 2 h)
+export async function openLater(memo, winnerStr) {
+  const o = await openPack(memo, 100, 60000); if (!o) return null;
+  await sleep(1500); let owner = null; try { owner = await ownerOfCoreAsset(o.nft_address); } catch { /* log */ }
+  return { ...mapOpen(o, memo, winnerStr), owner, delivered: owner === winnerStr };
 }

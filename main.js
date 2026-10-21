@@ -468,6 +468,8 @@ function renderPrize() {   // carta ganha (modo solana): comprando -> entregue /
   const el = $('prizeInfo'), p = prizeState; if (!el || !p) return;
   const you = player ? String(player.i) : '', mine = resultsEl.dataset.winner === you;
   if (p.status === 'buying') el.innerHTML = '<div class="prize">Buying the prize pack… ⏳</div>';
+  else if (p.status === 'refunded') el.innerHTML = '<div class="prize">The prize pack could not be bought — everyone is being refunded automatically.</div>';
+  else if (p.status === 'delayed') el.innerHTML = '<div class="prize">Your prize is taking longer than usual — it will be delivered to your wallet shortly. ⏳</div>';
   else if (p.status === 'manual') el.innerHTML = '<div class="prize">The host will deliver your prize pack to your wallet soon. 📦</div>';
   else if (p.status === 'done') el.innerHTML = `<div class="prize done">${p.image ? `<img src="${esc(p.image)}" alt="card">` : ''}<b>${esc(p.name)}</b><span>${esc(p.rarity || '')}${p.insured ? ' · insured value $' + p.insured : ''}</span><small>${mine ? 'Sent to YOUR wallet!' : "Sent to the winner's wallet"}</small></div>`;
   else el.innerHTML = '<div class="prize">Prize delivery failed — the host will deliver it manually.</div>';
@@ -600,7 +602,7 @@ async function signAndReturn(b64) {   // recebe a transação montada pelo servi
 function setPayMsg(t) { const m = $('payMsg'); if (m) { m.textContent = t; m.style.color = '#cfd8ff'; } }
 function setPayError(t) { const m = $('payMsg'), b = $('payNow'); if (m) { m.textContent = t; m.style.color = '#ff9a9a'; } if (b) b.disabled = false; }
 let paidMode = false, paidCfg = null, paidPack = 'pokemon_25', paidRound = null, payShown = false;
-const PAID_DEFAULT = { mode: 'sim', min: 2, packs: [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }] };
+const PAID_DEFAULT = { mode: 'sim', min: 2, packs: [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }] };
 fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; if (paidMode) renderPaidBox(); }).catch(() => { paidCfg = PAID_DEFAULT; });
 const usd = v => '$' + (+v).toFixed(2);
 function packByCode(c) { return ((paidCfg || PAID_DEFAULT).packs.find(p => p.code === c)) || (paidCfg || PAID_DEFAULT).packs[0]; }
@@ -608,7 +610,7 @@ function renderPaidBox() {
   const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT, real = cfg.mode === 'solana', realMoney = real && cfg.network !== 'devnet';
   box.style.display = paidMode ? 'block' : 'none'; if (!paidMode) return;
   const netTxt = cfg.network === 'devnet' ? 'Solana <b>DEVNET</b> (test network — fake money, no real cost)' : 'Solana (real money!)';
-  box.innerHTML = `<div><b>Pick the prize pack</b></div><div class="packs">${cfg.packs.map(p => `<button data-c="${p.code}" class="${p.code === paidPack ? 'sel' : ''}">${esc(p.label)} · ${usd(p.usd)}</button>`).join('')}</div>`
+  box.innerHTML = (cfg.packs.length < 2 ? `<div><b>Prize: ${esc(cfg.packs[0].label)} · ${usd(cfg.packs[0].usd)}</b></div>` : '') + `${cfg.packs.length > 1 ? '<div><b>Pick the prize pack</b></div>' : ''}<div class="packs" style="${cfg.packs.length < 2 ? 'display:none' : ''}">${cfg.packs.map(p => `<button data-c="${p.code}" class="${p.code === paidPack ? 'sel' : ''}">${esc(p.label)} · ${usd(p.usd)}</button>`).join('')}</div>`
     + (real ? `<div class="walletRow"><button id="walletBtn" class="${WALLET.pubkey ? 'ok' : ''}">${WALLET.pubkey ? '✓ ' + WALLET.pubkey.slice(0, 4) + '…' + WALLET.pubkey.slice(-4) : 'CONNECT WALLET'}</button><span>${netTxt}</span></div>` : '')
     + `<div class="rules">Joining is free. When at least ${cfg.min} players are in the lobby, it locks and the pack price${cfg.fee ? ` (+ ${cfg.fee}% service fee)` : ''} is <b>split between everyone</b> (more players = cheaper).<br>`
     + (cfg.paused ? '<div class="rules" style="color:#ff9a9a"><b>Prize races are paused right now.</b> Try again later.</div>' : '')

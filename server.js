@@ -35,7 +35,7 @@ const PAID_START = +process.env.PAID_START || 20;     // com PAID_MIN jogadores:
 const PAY_WINDOW = +process.env.PAY_WINDOW || 60;     // tempo para todos pagarem depois de travar
 const PAID_GRACE = 10, PAID_RESULTS = 15, MAX_AVG_SPEED = 26;   // fim da corrida após o 1º, tempo na tela de resultado, teto de velocidade média (antitrapaça)
 const PAYMENT_MODE = String(process.env.PAYMENT_MODE || 'sim').trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
-const PACKS = [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }, { code: 'pokemon_50', usd: 50, label: 'Elite Pack' }, { code: 'pokemon_100', usd: 100, label: 'Bronze Pack' }];
+const PACKS = [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }];   // só o pacote de US$ 25
 let FEE_PCT = +process.env.HOUSE_FEE_PCT || 0;   // taxa de serviço (%) somada ao preço do pacote (padrão 5% na mainnet)
 const shareFor = (pack, n) => Math.ceil(pack.usd * (1 + FEE_PCT / 100) * 100 / n) / 100;   // preço do pacote (+ taxa) dividido entre os n jogadores, arredondado para cima
 const payOk = m => PAYMENT_MODE === 'sim' && typeof m.pay === 'string' && m.pay.startsWith('SIM:');   // TODO: verificar pagamento real (Solana)
@@ -191,11 +191,13 @@ class Room {
     }).catch(e => { c.submitting = false; c.payExp = null; log(`room ${this.id}: pay failed for ${c.name}: ${e.message}`); send(c, { t: 'payfail', reason: friendlyErr(e) }); });
   }
   refundClient(c, reason, wallet) {   // devolve o que o jogador pagou (simulado: só registra)
-    const amount = c.amount, to = wallet || c.wallet; c.paid = false;
+    const amount = c.amount, to = wallet || c.wallet; c.paid = false; this.refundTo(c, c.name, to, amount, reason);
+  }
+  refundTo(c, name, to, amount, reason) {
     if (PAYMENT_MODE === 'solana' && to) {
-      SOL.refund(to, amount, `PR-refund:${this.id}:${c.id}`).then(sig => { log(`REFUND room ${this.id}: ${c.name} $${amount} -> ${to} sig ${sig} - ${reason}`); send(c, { t: 'refund', amount, reason, sig }); })
-        .catch(e => log(`REFUND FAILED room ${this.id}: ${c.name} ${to} $${amount} - ${e.message}  (devolver manualmente!)`));
-    } else { send(c, { t: 'refund', amount, reason }); log(`REFUND room ${this.id}: ${c.name} $${amount} (${PAYMENT_MODE}) - ${reason}`); }
+      SOL.refund(to, amount, `PR-refund:${this.id}:${c.id}`).then(sig => { log(`REFUND room ${this.id}: ${name} $${amount} -> ${to} sig ${sig} - ${reason}`); send(c, { t: 'refund', amount, reason, sig }); })
+        .catch(e => log(`REFUND FAILED room ${this.id}: ${name} ${to} $${amount} - ${e.message}  (devolver manualmente!)`));
+    } else { send(c, { t: 'refund', amount, reason }); log(`REFUND room ${this.id}: ${name} $${amount} (${PAYMENT_MODE}) - ${reason}`); }
   }
   relock(reason) {   // devolve o que já foi pago e reabre o lobby (o preço precisa ser recalculado)
     for (const c of this.clients) { c.payExp = null; if (c.paid) this.refundClient(c, reason); }
@@ -219,8 +221,15 @@ class Room {
       log(`PRIZE OK room ${this.id}: ${w.name} got "${r.name}" (${r.rarity}, insured $${r.insured}) nft ${r.nft} delivered=${r.delivered} memo ${r.memo}`);
       this.broadcast({ t: 'prize', status: 'done', winner: w.i, name: r.name, rarity: r.rarity, insured: r.insured, image: r.image, nft: r.nft, delivered: r.delivered });
     }).catch(e => {
-      log(`PRIZE FAILED room ${this.id}: winner ${w.name} ${w.wallet} pack ${pack.code} - ${e.message}  (entregar manualmente!)`);
-      this.broadcast({ t: 'prize', status: 'failed', winner: w.i });
+      if (e && e.paid) {   // o pacote já foi pago, só falta abrir: continua tentando em segundo plano
+        log(`PRIZE DELAYED room ${this.id}: winner ${w.name} ${w.wallet} memo ${e.memo} - ${e.message}; retrying in background`);
+        this.broadcast({ t: 'prize', status: 'delayed', winner: w.i });
+        SOL.openLater(e.memo, w.wallet).then(r => log(r ? `PRIZE OK (late) room ${this.id}: ${w.name} got "${r.name}" nft ${r.nft} delivered=${r.delivered} memo ${r.memo}` : `PRIZE LOST room ${this.id}: memo ${e.memo} winner ${w.wallet} - a API reembolsa o pacote não aberto; devolver aos jogadores`)).catch(() => {});
+        return;
+      }
+      log(`PRIZE FAILED room ${this.id}: ${e.message} - refunding all players`);
+      this.broadcast({ t: 'prize', status: 'refunded', winner: w.i });
+      for (const p of (this.payers || [])) this.refundTo(p.client, p.name, p.wallet, p.amount, 'The prize pack could not be bought');
     }).finally(() => { this.prizePending = false; this.resultsLeft = Math.max(this.resultsLeft, 12); });
   }
   cancelPaid() {
@@ -265,7 +274,7 @@ class Room {
     this.nextLevel = null; this.buildWorld();
     const used = new Set(this.slots.filter(r => r && r.human).map(r => r.pk));
     const free = SPECIES.map((_, k) => k).filter(k => !used.has(k)); for (let k = free.length - 1; k > 0; k--) { const j = rand(k + 1); [free[k], free[j]] = [free[j], free[k]]; }
-    if (this.paid) { this.starters = this.humans(); this.winner = null; for (const h of this.slots) if (h && h.human) { h.adv = 120; h.lastStateT = 0; h.sus = 0; h.wallet = h.human.wallet || ''; h.payRef = h.human.payRef; } }
+    if (this.paid) { this.payers = [...this.clients].map(c => ({ name: c.name, wallet: c.wallet, amount: c.amount, client: c })); this.starters = this.humans(); this.winner = null; for (const h of this.slots) if (h && h.human) { h.adv = 120; h.lastStateT = 0; h.sus = 0; h.wallet = h.human.wallet || ''; h.payRef = h.human.payRef; } }
     for (let i = 0; i < SLOTS; i++) {
       let r = this.slots[i];
       if (this.paid && (!r || !r.human)) { this.slots[i] = null; continue; }
