@@ -335,7 +335,9 @@ function animSpots(dt, tn) {
 }
 const toastEl = $('toast'), flashEl = $('flash'), itemEl = $('item');
 let toastT = 0, lastItem = null;
-function toast(text, col = '#fff') { toastEl.textContent = text; toastEl.style.color = col; toastEl.style.opacity = 1; toastT = 2.0; }
+let toastTimer = null;
+function hideToast() { clearTimeout(toastTimer); toastT = 0; toastEl.style.opacity = 0; }
+function toast(text, col = '#fff') { toastEl.textContent = text; toastEl.style.color = col; toastEl.style.opacity = 1; toastT = 2.0; clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 2600); }   // some sozinho mesmo nas telas iniciais (onde o loop da corrida não roda)
 function refreshItemPanel() {
   const it = player && player.item;
   if (it === lastItem) return; lastItem = it;
@@ -586,7 +588,7 @@ async function getWalletProvider() {
 }
 async function connectWallet() {
   try { const p = await getWalletProvider(), r = await p.connect(); WALLET.provider = p; WALLET.pubkey = String((r && r.publicKey) || p.publicKey); }
-  catch (e) { toast(String(e && e.message || e).slice(0, 90), '#ff9a9a'); }
+  catch (e) { const m = String(e && e.message || e); toast(/reject|denied|cancel|closed/i.test(m) ? 'Wallet connection cancelled' : m.slice(0, 90), '#ff9a9a'); }
   renderPaidBox();
 }
 const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
@@ -620,9 +622,11 @@ function renderPaidBox() {
   $('playBtn').disabled = !!cfg.paused || (real && !WALLET.pubkey);
 }
 function showMode() {
+  hideToast();
   $('mode').style.display = 'block'; homeEl.style.display = 'none'; $('payBox').style.display = 'none'; paidMode = false;
 }
 function enterHome(paid) {
+  hideToast();
   paidMode = paid; $('mode').style.display = 'none'; homeEl.style.display = 'block';
   $('playBtn').textContent = paid ? 'FIND A PRIZE RACE' : 'PLAY'; $('practiceBtn').style.display = paid ? 'none' : '';
   const tip = homeEl.querySelector('.tip'); if (tip) tip.textContent = paid ? 'Pick your character (← → keys work too) · prize races are real players only — no bots' : 'Pick your character (← → keys work too) · online races with up to 16 players, bots fill empty spots';
