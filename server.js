@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { CFG, createWorld, makeHeadlessAPI, applyLevelToWorld, createRacer, spawnRacer, stepRacer, botInput,
   updateWorld, resetWorldClock, triggerFallUnder, deadTileIndices, nearestNodeAhead,
-  finalizeWorld, updateItems, updateTraps, botUseItem, useItem, applyFx, fxBits, tickBuffs } from './shared/sim.js';
+  finalizeWorld, updateItems, updateTraps, botUseItem, useItem, applyFx, fxBits, tickBuffs, applyPerks } from './shared/sim.js';
 import { makeLevels } from './shared/levels.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -60,15 +60,17 @@ if (SOL) {
 const friendlyErr = e => { const m = String(e && e.message || e); return /insufficient|0x1\b/i.test(m) ? 'Not enough USDC in your wallet' : /AccountNotFound|could not find account|InvalidAccountData|0xbc4/i.test(m) ? 'Your wallet has no USDC account yet' : /blockhash|expired/i.test(m) ? 'The payment expired, try again' : m.slice(0, 120); };
 
 // ------------------------------------------------------------------ arquivos estáticos
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.wav': 'audio/wav', '.obj': 'text/plain; charset=utf-8', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.obj': 'text/plain; charset=utf-8', '.ico': 'image/x-icon' };
 const GZ = new Set(['.html', '.js', '.json', '.obj', '.wav']);
 const gzCache = new Map();
 const PUBLIC_DIRS = ['assets/', 'shared/', 'levels/', 'addons/'];
-const PUBLIC_ROOT = new Set(['index.html', 'how.html', 'main.js', 'net.js', 'anim.js', 'env.js', 'pokemon.js', 'fx.js', 'OBJLoader.js', 'three.module.js']);
+const PUBLIC_ROOT = new Set(['index.html', 'how.html', 'landing.html', 'main.js', 'net.js', 'anim.js', 'env.js', 'pokemon.js', 'fx.js', 'OBJLoader.js', 'three.module.js']);
 function serveStatic(req, res) {
   let rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '');
-  if (rel === '') rel = 'index.html';
-  if (rel === 'how') rel = 'how.html';   // página "How it works"
+  rel = rel.replace(/\/+$/, '');
+  if (rel === '') rel = 'landing.html';        // página inicial (landing)
+  if (rel === 'play') rel = 'index.html';       // o jogo (lobby + corridas)
+  if (rel === 'how') rel = 'how.html';          // página "How it works"
   if (rel === 'health') { res.writeHead(200); return res.end('ok'); }
   if (rel === 'favicon.ico') { res.writeHead(204); return res.end(); }
   if (rel === 'paid/config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ mode: PAYMENT_MODE, network: SOL ? SOL.info().network : null, real: !!(SOL && SOL.info().real), house: SOL ? SOL.info().house : null, fee: FEE_PCT, paused: !PAID_ENABLED || !OPERATIONAL, prizeMode: PRIZE_MODE, min: PAID_MIN, wait: PAID_WAIT, start: PAID_START, payWindow: PAY_WINDOW, packs: PACKS })); }
@@ -116,6 +118,7 @@ class Room {
   }
   buildWorld() {
     const lv = LEVELS[this.levelIndex], w = createWorld(); applyLevelToWorld(w, lv); lv.build(makeHeadlessAPI(w)); finalizeWorld(w); resetWorldClock(w);
+    w.perks = !this.paid;   // habilidades de personagem: só nas salas grátis (nas com prêmio todos são iguais)
     this.world = w; this.level = lv; this.roundTime = w.roundTime;
   }
   humans() { return this.slots.filter(r => r && r.human).length; }
@@ -283,7 +286,7 @@ class Room {
       let r = this.slots[i];
       if (this.paid && (!r || !r.human)) { this.slots[i] = null; continue; }
       if (!r || !r.human) { r = createRacer(i); r.human = null; const pk = free.length ? free.pop() : rand(SPECIES.length); r.pk = pk; r.name = SPECIES[pk]; this.slots[i] = r; }
-      spawnRacer(r, this.world.spawnFn(i)); r.finTime = null; r.rep = 1; r.itemSent = null;
+      spawnRacer(r, this.world.spawnFn(i)); r.finTime = null; r.rep = 1; r.itemSent = null; applyPerks(this.world, r);
     }
     this.evq.length = 0; this.ibKey = ''; this.trKey = '';
     this.phase = 'countdown'; this.cd = CFG.countdown; this.finishedCount = 0; this.endTimer = 0; this.raceT = 0; this.leftT = this.roundTime; this.deadKey = '';

@@ -2,6 +2,8 @@
 // Contém: constantes, "mundo" da fase (caixas, martelos, bumpers, plataformas móveis...), física do corredor e IA dos bots.
 // Tudo aqui usa objetos simples {x,y,z} para rodar igual nos dois lados.
 
+import { CHARS, PERK_BOOST } from './roster.js';
+
 export const CFG = {
   racers: 16, qualifySlots: 8, roundTime: 120, countdown: 3,
   speed: 9.6, accelGround: 80, accelAir: 20, gravity: -30, jump: 13,            // mais rápido e mais ágil (valores nossos)
@@ -291,10 +293,13 @@ export function finalizeWorld(w) {
     }
   }
 }
-function rollItem(racers, r) {
+// habilidade de personagem: começa a corrida com um poder (só se o mundo tiver perks ligados; salas com prêmio desligam)
+export function applyPerks(w, r) { const c = CHARS[r.pk]; if (w && w.perks && c) r.item = c.start; }
+function rollItem(racers, r, w) {
   const live = racers.filter(q => !q.finished).sort((a, b) => a.pos.z - b.pos.z), idx = live.indexOf(r);
   const p = live.length > 1 && idx >= 0 ? idx / (live.length - 1) : 0.5;
-  const ws = ITEMS.map(k => WEIGHTS[k](p)); let t = Math.random() * ws.reduce((a, b) => a + b, 0);
+  const aff = w && w.perks && CHARS[r.pk] ? CHARS[r.pk].likely : null;   // poderes favoritos do personagem aparecem mais
+  const ws = ITEMS.map(k => WEIGHTS[k](p) * (aff && aff.includes(k) ? PERK_BOOST : 1)); let t = Math.random() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < ITEMS.length; i++) { t -= ws[i]; if (t <= 0) return ITEMS[i]; }
   return ITEMS[0];
 }
@@ -321,7 +326,7 @@ export function updateItems(w, racers, dt, now, ev) {
       const d = Math.hypot(r.pos.x - sp.x, r.pos.z - sp.z);
       if (d < ITEM_CFG.pickupR && r.pos.y < sp.y + 1.2 && r.pos.y + CFG.height > sp.y - 1.0 && d < bd) { bd = d; who = r; }
     }
-    if (who) { who.item = rollItem(racers, who); who.useAt = now + 0.7 + Math.random() * 2.2; sp.cool = ITEM_CFG.respawn; ev({ k: 'pickup', i: who.i, s: k, item: who.item }); }
+    if (who) { who.item = rollItem(racers, who, w); who.useAt = now + 0.7 + Math.random() * 2.2; sp.cool = ITEM_CFG.respawn; ev({ k: 'pickup', i: who.i, s: k, item: who.item }); }
   });
   for (const r of racers) if (r.itemCool > 0) r.itemCool -= dt;
 }

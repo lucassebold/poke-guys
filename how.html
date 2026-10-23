@@ -54,9 +54,9 @@ code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-brea
 </style></head><body><div class="wrap">
 
 <header>
-  <h1 class="logo">POKE RUN</h1>
+  <h1 class="logo"><a href="/" style="text-decoration:none;color:inherit">POKE RUN</a></h1>
   <p>How it works</p>
-  <div class="cta"><a class="btn free" href="/">▶ Play free</a><a class="btn paid" href="/">🏆 Play for prize</a></div>
+  <div class="cta"><a class="btn free" href="/play#free">▶ Play free</a><a class="btn paid" href="/play#prize">🏆 Play for prize</a></div>
   <div class="testbanner" id="testBanner">⚠ This server is on the <b>Solana test network</b>: prize races use fake test money and test cards.</div>
 </header>
 
@@ -163,7 +163,7 @@ code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-brea
   </div>
 </section>
 
-<footer>Poke Run · <a href="/">Back to the game</a><br><span style="opacity:.8">Independent fan project — not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.</span></footer>
+<footer>Poke Run · <a href="/play">Back to the game</a> · <a href="/">Home</a><br><span style="opacity:.8">Independent fan project — not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.</span></footer>
 </div>
 <script>
 fetch('/paid/config').then(r => r.json()).then(c => {

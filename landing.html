@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poke Run — the chaotic obstacle race for up to 16 players</title>
+<meta name="description" content="Dodge hammers, ride giant slides and grab wild power-ups. Race up to 16 players in your browser — free to play, with optional prize races.">
+<meta property="og:title" content="Poke Run — 16 racers. One finish line. Pure chaos.">
+<meta property="og:description" content="A fast, chaotic obstacle race in your browser. Free to play, no sign-up.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://poke-guys-production.up.railway.app/assets/landing/cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#12082e">
+<style>
+:root{--bg:#12082e;--card:#241254;--card2:#1a0d40;--line:#ffffff24;--txt:#f4efff;--mut:#bdb2e6;--y:#ffcb05;--p:#ff4fa3;--c:#4fe3ff;--g:#5dff7a;--o:#ff8a1a}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;color:var(--txt);background:var(--bg);line-height:1.5;overflow-x:hidden}
+.bgglow{position:absolute;left:0;right:0;top:0;height:1100px;background:radial-gradient(900px 520px at 78% 30%,#ff4fa355,transparent 70%),radial-gradient(800px 500px at 10% 0%,#4fe3ff33,transparent 70%),linear-gradient(180deg,#34127a,#12082e 100%);z-index:-1}
+.wrap{width:min(1200px,100% - 40px);margin:0 auto;position:relative}
+nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;gap:14px}
+.logo{font:900 clamp(26px,3vw,34px)/1 "Arial Black","Segoe UI Black",sans-serif;letter-spacing:2px;background:linear-gradient(90deg,var(--y),var(--p),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #1a0d2e);text-decoration:none;white-space:nowrap}
+nav .links{display:flex;gap:28px;font-weight:700}
+nav .links a{color:var(--mut);text-decoration:none}nav .links a:hover{color:#fff}
+.btn{display:inline-block;padding:15px 34px;border-radius:16px;font:900 20px/1 "Segoe UI Black","Arial Black",sans-serif;color:#fff;text-decoration:none;letter-spacing:.5px;transition:transform .12s,filter .12s;text-align:center}
+.btn:hover{transform:translateY(-3px);filter:brightness(1.08)}
+.btn.free{background:linear-gradient(180deg,#6dff8a,#1fc24a);box-shadow:0 6px 0 #0f7a2b,0 0 30px #5dff7a66}
+.btn.paid{background:linear-gradient(180deg,#ffd84f,#ff8a1a);color:#2a1055;box-shadow:0 6px 0 #a64b00,0 0 30px #ffcb0577}
+.btn.sm{padding:11px 22px;font-size:16px;box-shadow:0 4px 0 #0f7a2b}
+.hero{display:grid;grid-template-columns:1.05fr 1fr;gap:26px;align-items:center;padding:20px 0 70px}
+.eyebrow{display:inline-block;padding:6px 14px;border-radius:99px;background:#ffffff1a;border:1px solid var(--line);font-weight:800;font-size:13px;letter-spacing:.1em;color:var(--y)}
+h1{margin:16px 0 14px;font:900 clamp(40px,6vw,74px)/1.02 "Arial Black","Segoe UI Black",sans-serif;letter-spacing:-1px;text-shadow:0 5px 0 #1a0d2e}
+h1 em{font-style:normal;display:inline-block;text-shadow:none;background:linear-gradient(90deg,var(--y),var(--p));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 5px 0 #1a0d2e)}
+.sub{font-size:clamp(17px,1.6vw,21px);color:var(--mut);max-width:520px}
+.cta{display:flex;gap:16px;margin:28px 0 20px;flex-wrap:wrap}
+.trust{display:flex;gap:10px 22px;font-weight:700;color:var(--mut);font-size:15px;flex-wrap:wrap}
+.trust span:before{content:"✓ ";color:var(--g)}
+.art{position:relative}
+.art img{width:100%;height:auto;display:block;border-radius:34px;border:3px solid #ffffff44;box-shadow:0 30px 80px #000a,0 0 90px #ff4fa366;transform:rotate(2deg)}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);padding:22px 10px;margin-bottom:10px;border-radius:22px;background:#ffffff0f;border:1px solid var(--line)}
+.strip div{text-align:center}.strip b{display:block;font:900 clamp(28px,3.4vw,40px)/1 "Arial Black",sans-serif;color:var(--y)}.strip span{color:var(--mut);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+section{padding:64px 0 0}
+h2{margin:0 0 6px;font:900 clamp(28px,3.6vw,44px)/1.1 "Arial Black","Segoe UI Black",sans-serif;text-align:center;text-shadow:0 4px 0 #1a0d2e}
+.lead{text-align:center;color:var(--mut);font-size:clamp(16px,1.5vw,19px);margin:0 auto 34px;max-width:680px}
+.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.shot{position:relative;border-radius:24px;overflow:hidden;border:3px solid #ffffff3a;box-shadow:0 20px 50px #000a;aspect-ratio:4/3}
+.shot img{width:100%;height:100%;object-fit:cover;object-position:center 60%;display:block}
+.shot b{position:absolute;left:0;right:0;bottom:0;padding:44px 18px 14px;background:linear-gradient(0deg,#12082eee,transparent);font:900 22px/1 "Arial Black",sans-serif}
+.shot small{display:block;font:600 14px/1.3 "Segoe UI",sans-serif;color:var(--mut);margin-top:4px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.step{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:24px;padding:26px 24px;text-align:center}
+.step .n{width:54px;height:54px;border-radius:50%;margin:0 auto 12px;background:linear-gradient(135deg,var(--y),var(--p));color:#2a1055;font:900 26px/54px "Arial Black",sans-serif}
+.step b{display:block;font:900 22px/1.2 "Arial Black",sans-serif;margin-bottom:6px}
+.step span{color:var(--mut)}
+.roles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.role{background:linear-gradient(160deg,var(--card),var(--card2));border:2px solid var(--k);border-radius:20px;padding:20px 16px;text-align:center;box-shadow:0 0 28px color-mix(in srgb,var(--k) 25%,transparent)}
+.role .ic{font-size:44px;filter:drop-shadow(0 0 14px var(--k))}
+.role b{display:block;font:900 20px/1.2 "Arial Black",sans-serif;margin:6px 0 4px;color:var(--k)}
+.role span{font-size:14px;color:var(--mut)}
+.powers{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.pw{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:20px;padding:18px;text-align:center}
+.pw .ic{font-size:50px;filter:drop-shadow(0 0 16px var(--k))}
+.pw b{display:block;font:900 17px/1.2 "Arial Black",sans-serif;margin-top:6px;color:var(--k)}
+.pw span{font-size:14px;color:var(--mut)}
+.prize{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:center;background:linear-gradient(135deg,#3a1585,#1c0b4a);border:2px solid #ffcb0566;border-radius:34px;padding:clamp(22px,4vw,44px);box-shadow:0 0 70px #ffcb0522}
+.prize h2{text-align:left;font-size:clamp(28px,3.2vw,40px)}
+.prize .lead{text-align:left;margin:0 0 20px}
+.flow{display:flex;flex-direction:column;gap:12px}
+.flow div{display:flex;align-items:center;gap:14px;background:#ffffff12;border:1px solid var(--line);border-radius:16px;padding:12px 16px;font-weight:700}
+.flow div i{flex:none;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--y),var(--p));color:#2a1055;font:900 18px/34px "Arial Black",sans-serif;text-align:center;font-style:normal}
+.split{display:flex;gap:10px;margin:18px 0 0;flex-wrap:wrap}
+.split div{background:#0007;border:2px solid var(--y);border-radius:14px;padding:9px 14px;text-align:center;font-weight:800;font-size:13px;color:var(--mut)}
+.split b{display:block;font:900 22px/1.1 "Arial Black",sans-serif;color:var(--y)}
+.note{margin-top:18px;font-size:13px;color:var(--mut)}
+.cardwrap{position:relative;display:flex;justify-content:center;min-height:380px;align-items:center}
+.tcard{position:relative;width:min(250px,60%);aspect-ratio:5/7;border-radius:18px;padding:12px;transform:rotate(-6deg);background:linear-gradient(145deg,#ffe36e,#ff9a3c 45%,#ff4fa3);box-shadow:0 26px 60px #000b,0 0 80px #ffcb0566;border:3px solid #fff5}
+.tcard:before{content:"";position:absolute;inset:0;border-radius:15px;background:linear-gradient(115deg,transparent 30%,#ffffff66 45%,transparent 60%);animation:holo 3.5s linear infinite}
+@keyframes holo{from{transform:translateX(-60%)}to{transform:translateX(60%)}}
+.tcard .in{width:100%;height:100%;border-radius:10px;background:radial-gradient(circle at 50% 38%,#4fe3ff,#7a3cff 60%,#241254);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.tcard .q{font:900 110px/1 "Arial Black",sans-serif;color:#fff;text-shadow:0 0 30px #fff,0 6px 0 #2a1055}
+.tcard .lab{position:absolute;left:10px;right:10px;bottom:10px;padding:6px;border-radius:8px;background:#12082ecc;text-align:center;font:900 13px/1.2 "Arial Black",sans-serif;letter-spacing:.1em;color:var(--y)}
+.tag{position:absolute;background:#12082ef2;border:2px solid var(--c);border-radius:14px;padding:8px 14px;font-weight:800;box-shadow:0 8px 24px #000a;font-size:14px}
+.sparkle{position:absolute;font-size:34px;filter:drop-shadow(0 0 10px #fff)}
+.final{text-align:center;margin-top:70px;padding:clamp(34px,6vw,56px) 20px;border-radius:34px;background:linear-gradient(135deg,#ff4fa3,#7a3cff 60%,#4fe3ff);box-shadow:0 30px 80px #7a3cff66}
+.final h2{font-size:clamp(32px,4.4vw,52px)}
+.final .cta{justify-content:center}
+.final p{font-size:20px;margin:6px 0 0;color:#fff;opacity:.95}
+footer{padding:36px 0 50px;text-align:center;color:var(--mut);font-size:13px}
+footer .l{display:flex;gap:26px;justify-content:center;margin-bottom:12px;font-weight:700;font-size:15px;flex-wrap:wrap}
+footer a{color:var(--mut);text-decoration:none}footer a:hover{color:#fff}
+.desk{display:none;margin:0 0 14px;padding:10px 14px;border-radius:12px;background:#ffb74d22;border:1px solid #ffb74d;color:#ffd9a6;font-weight:700;font-size:14px;text-align:center}
+@media (max-width:900px){
+  nav .links{display:none}
+  .hero{grid-template-columns:1fr;padding-bottom:50px}.art{max-width:520px;margin:0 auto}
+  .shots,.steps{grid-template-columns:1fr}.roles,.powers{grid-template-columns:repeat(2,1fr)}
+  .prize{grid-template-columns:1fr}.cardwrap{min-height:330px}
+  .strip{grid-template-columns:repeat(2,1fr);gap:16px 0}
+}
+@media (max-width:520px){.btn{width:100%}.cta{gap:12px}.roles,.powers{grid-template-columns:1fr}}
+@media (pointer:coarse){.desk{display:block}}
+</style></head><body>
+<div class="bgglow"></div>
+<div class="wrap">
+
+<nav><a class="logo" href="/">POKE RUN</a>
+  <div class="links"><a href="#how">How it works</a><a href="#racers">Racers</a><a href="#powers">Power-ups</a><a href="#prize">Play for prize</a></div>
+  <a class="btn free sm" href="/play#free">▶ Play free</a></nav>
+<div class="desk">📱 Poke Run is played with a keyboard — open it on a computer for the best experience.</div>
+
+<div class="hero">
+  <div>
+    <span class="eyebrow">FREE · NO SIGN-UP · IN YOUR BROWSER</span>
+    <h1>16 racers.<br>One finish line.<br><em>Pure chaos.</em></h1>
+    <p class="sub">Dodge hammers, ride giant slides, grab wild power-ups and race your friends. Want more? Race for a real card pack.</p>
+    <div class="cta"><a class="btn free" href="/play#free">▶ PLAY FREE</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PRIZE</a></div>
+    <div class="trust"><span>Up to 16 players</span><span>15 courses</span><span>8 power-ups</span></div>
+  </div>
+  <div class="art"><img src="/assets/landing/cover.jpg" srcset="/assets/landing/cover_sm.jpg 600w, /assets/landing/cover.jpg 1100w" sizes="(max-width:900px) 90vw, 560px" alt="Poke Run key art"></div>
+</div>
+
+<div class="strip"><div><b>16</b><span>players per race</span></div><div><b>15</b><span>wild courses</span></div><div><b>8</b><span>power-ups</span></div><div><b>$0</b><span>to start playing</span></div></div>
+
+<section>
+  <h2>See it in action</h2>
+  <p class="lead">Fast, bouncy and a little bit unfair — in the best way.</p>
+  <div class="shots">
+    <div class="shot"><img loading="lazy" src="/assets/landing/shot_slide.jpg" alt="Giant slide"><b>Giant slides<small>Climb a trampoline, then rocket down</small></b></div>
+    <div class="shot"><img loading="lazy" src="/assets/landing/shot_power.jpg" alt="Power-ups"><b>Mystery power-ups<small>Swap places, kick, slime, turbo…</small></b></div>
+    <div class="shot"><img loading="lazy" src="/assets/landing/shot_thunder.jpg" alt="Thunder"><b>Thunder chaos<small>Hammers, bumpers and lightning</small></b></div>
+  </div>
+</section>
+
+<section id="how">
+  <h2>Jump in. It takes 10 seconds.</h2>
+  <p class="lead">No download, no account. Pick a racer and go.</p>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><b>Pick your racer</b><span>16 characters, each with their own starting power-up.</span></div>
+    <div class="step"><div class="n">2</div><b>Hit play</b><span>Join a lobby with other players. Bots fill the empty spots.</span></div>
+    <div class="step"><div class="n">3</div><b>Cross the line first</b><span>Dodge, dive and use power-ups to qualify for the next round.</span></div>
+  </div>
+</section>
+
+<section id="racers">
+  <h2>Every racer has a style</h2>
+  <p class="lead">Each racer starts with a power-up and finds some power-ups more often. Pick the one that fits how you play.</p>
+  <div class="roles">
+    <div class="role" style="--k:#ffcb05"><div class="ic">🚀</div><b>SPEEDSTER</b><span>Starts with a burst of speed.</span></div>
+    <div class="role" style="--k:#4fe3ff"><div class="ic">🛡️</div><b>DEFENDER</b><span>Starts with a shield against the first hit.</span></div>
+    <div class="role" style="--k:#ff4fa3"><div class="ic">🍌</div><b>TRICKSTER</b><span>Starts with a banana trap ready to drop.</span></div>
+    <div class="role" style="--k:#5dff7a"><div class="ic">🦘</div><b>LEAPER</b><span>Starts with a mega jump for the first big gap.</span></div>
+  </div>
+</section>
+
+<section id="powers">
+  <h2>Power-ups that change the race</h2>
+  <p class="lead">Glowing boxes along the track. First to touch one gets it.</p>
+  <div class="powers">
+    <div class="pw" style="--k:#ff5fa8"><div class="ic">👅</div><b>TONGUE SWAP</b><span>Swap places with the racer ahead</span></div>
+    <div class="pw" style="--k:#ff9a3c"><div class="ic">🥾</div><b>BOOT KICK</b><span>Kick them off the map</span></div>
+    <div class="pw" style="--k:#5dff3a"><div class="ic">🟢</div><b>SLIME</b><span>Slow the racer ahead</span></div>
+    <div class="pw" style="--k:#7dff5a"><div class="ic">🦘</div><b>MEGA JUMP</b><span>A huge leap over everything</span></div>
+    <div class="pw" style="--k:#ffd24d"><div class="ic">🚀</div><b>TURBO</b><span>Short burst of speed</span></div>
+    <div class="pw" style="--k:#66d4ff"><div class="ic">🛡️</div><b>SHIELD</b><span>Blocks the next hit</span></div>
+    <div class="pw" style="--k:#ffe21a"><div class="ic">🍌</div><b>BANANA</b><span>Drop a slippery trap</span></div>
+    <div class="pw" style="--k:#fff27a"><div class="ic">⚡</div><b>THUNDER CLAP</b><span>Stun everyone nearby</span></div>
+  </div>
+</section>
+
+<section id="prize">
+  <div class="prize">
+    <div>
+      <span class="eyebrow">PLAY FOR PRIZE</span>
+      <h2 style="margin-top:10px">Split the pack.<br>Winner takes the card.</h2>
+      <p class="lead">Everyone shares the price of one card pack. First to finish wins it — sent straight to their wallet.</p>
+      <div class="flow">
+        <div><i>1</i>Join a lobby — free</div>
+        <div><i>2</i>Lobby locks, the price is split between all players</div>
+        <div><i>3</i>Race against real players only — no bots</div>
+        <div><i>4</i>The winner gets the card in their wallet</div>
+      </div>
+      <div class="split" id="split"></div>
+      <div class="note">Cards are random and can be worth more or less than the pack price. Play responsibly. <a href="/how#prize" style="color:var(--c)">How it works ↗</a></div>
+    </div>
+    <div class="cardwrap">
+      <div class="tcard"><div class="in"><div class="q">?</div><div class="lab">MYSTERY CARD</div></div></div>
+      <div class="tag" style="left:0;top:34px">🏆 YOU WON the Starter Pack!</div>
+      <div class="tag" style="right:0;bottom:34px;border-color:var(--g)">✓ Sent to your wallet</div>
+      <div class="sparkle" style="left:8%;bottom:26%">✨</div><div class="sparkle" style="right:12%;top:12%">✨</div>
+    </div>
+  </div>
+</section>
+
+<div class="final">
+  <h2>Ready to race?</h2>
+  <p>Free to play. Zero sign-up. Takes 10 seconds.</p>
+  <div class="cta" style="margin-top:26px"><a class="btn free" href="/play#free">▶ PLAY FREE</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PRIZE</a></div>
+</div>
+
+<footer>
+  <div class="l"><a href="/how">How it works</a><a href="#racers">Racers</a><a href="#powers">Power-ups</a><a href="/play#prize">Play for prize</a></div>
+  Poke Run is an independent fan project — not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.
+</footer>
+</div>
+<script>
+// preço por jogador calculado ao vivo com a configuração do servidor (pacote + taxa)
+(function () {
+  const render = (usdPack, fee) => {
+    const total = usdPack * (1 + fee / 100), el = document.getElementById('split'); el.innerHTML = '';
+    for (const n of [2, 4, 8, 16]) { const share = Math.ceil(total * 100 / n) / 100; el.insertAdjacentHTML('beforeend', `<div>${n} players<b>$${share.toFixed(2)}</b></div>`); }
+  };
+  render(25, 5);
+  fetch('/paid/config').then(r => r.json()).then(c => { const p = c.packs && c.packs[0]; if (p) render(+p.usd, +c.fee || 0); }).catch(() => {});
+})();
+</script>
+</body></html>

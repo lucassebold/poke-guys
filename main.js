@@ -8,7 +8,8 @@ import { Animator } from './anim.js';
 import { createSky, createSea, createClouds, createIslands, grassTexture, addGrass, grassUniforms, SEA_Y } from './env.js';
 import { CFG, vec, createWorld, clearWorld, recBox, recSpinner, recBumper, recCheckpoint, recNode, registerMover, applyLevelToWorld,
   updateWorld, resetWorldClock, applyDead, createRacer, spawnRacer, stepRacer, botInput,
-  finalizeWorld, updateItems, updateTraps, botUseItem, useItem, applyFx, ITEM_CFG } from './shared/sim.js';
+  finalizeWorld, updateItems, updateTraps, botUseItem, useItem, applyFx, applyPerks, ITEM_CFG } from './shared/sim.js';
+import { CHARS, ROLES } from './shared/roster.js';
 import { createFx } from './fx.js';
 import { makeLevels } from './shared/levels.js';
 import { openSocket } from './net.js';
@@ -35,7 +36,10 @@ addEventListener('unhandledrejection', e => { msg.textContent = 'ERROR: ' + (e.r
 msg.textContent = 'Loading…';
 
 const AC = new (window.AudioContext || window.webkitAudioContext)();
-const master = AC.createGain(); master.gain.value = 0.8; master.connect(AC.destination);
+const master = AC.createGain(); master.gain.value = 0.8;
+// controle de volume (botão + slider no canto): lembra a escolha
+let volLevel = 0.8, volMuted = false;
+try { const v = parseFloat(localStorage.getItem('pr_vol')); if (isFinite(v)) volLevel = Math.min(1, Math.max(0, v)); volMuted = localStorage.getItem('pr_mute') === '1'; } catch { /* ignore */ } master.connect(AC.destination);
 const bufs = {}, tex = {}, meshGeo = {};
 let LEVEL7 = null;
 const texLoader = new THREE.TextureLoader(), objLoader = new OBJLoader();
@@ -488,14 +492,15 @@ function makeOfflineRacers() {
 }
 function startRoundOffline() {
   hideResults(); mode = 'offline';
-  racers.forEach(r => spawnRacer(r, world.spawnFn(r.i)));
+  world.perks = true;   // habilidades de personagem ligadas no treino
+  racers.forEach(r => { spawnRacer(r, world.spawnFn(r.i)); applyPerks(world, r); });
   state = 'countdown'; t = CFG.countdown; finishedCount = 0; endTimer = 0; raceElapsed = 0;
   resetWorldClock(world); world.serverTiles = false;
-  camYaw = 0; msg.textContent = ''; spec.active = false; spec.index = 0; msgTimer = 0; menuEl.style.display = 'none'; $('home').style.display = 'none';
+  camYaw = 0; msg.textContent = ''; spec.active = false; spec.index = 0; msgTimer = 0; menuEl.style.display = 'none'; $('lobby').style.display = 'none';
   startAmbient(); play('count', { vol: 0.9 });
 }
 function startOffline(levelI) {
-  closeNet(); mode = 'offline'; $('mode').style.display = 'none';
+  closeNet(); mode = 'offline'; $('lobby').style.display = 'none';
   if (levelI != null && levelI !== levelIndex) loadLevel(levelI);
   makeOfflineRacers(); menuSel = levelIndex; startRoundOffline();
 }
@@ -589,7 +594,7 @@ async function getWalletProvider() {
 async function connectWallet() {
   try { const p = await getWalletProvider(), r = await p.connect(); WALLET.provider = p; WALLET.pubkey = String((r && r.publicKey) || p.publicKey); }
   catch (e) { const m = String(e && e.message || e); toast(/reject|denied|cancel|closed/i.test(m) ? 'Wallet connection cancelled' : m.slice(0, 90), '#ff9a9a'); }
-  renderPaidBox();
+  renderLobby();
 }
 const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
 const bytesToB64 = u => { let s = ''; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
@@ -605,32 +610,56 @@ function setPayMsg(t) { const m = $('payMsg'); if (m) { m.textContent = t; m.sty
 function setPayError(t) { const m = $('payMsg'), b = $('payNow'); if (m) { m.textContent = t; m.style.color = '#ff9a9a'; } if (b) b.disabled = false; }
 let paidMode = false, paidCfg = null, paidPack = 'pokemon_25', paidRound = null, payShown = false;
 const PAID_DEFAULT = { mode: 'sim', min: 2, packs: [{ code: 'pokemon_25', usd: 25, label: 'Starter Pack' }] };
-fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; if (paidMode) renderPaidBox(); }).catch(() => { paidCfg = PAID_DEFAULT; });
+fetch('/paid/config').then(r => r.json()).then(c => { paidCfg = c; renderLobby(); }).catch(() => { paidCfg = PAID_DEFAULT; });
 const usd = v => '$' + (+v).toFixed(2);
 function packByCode(c) { return ((paidCfg || PAID_DEFAULT).packs.find(p => p.code === c)) || (paidCfg || PAID_DEFAULT).packs[0]; }
 function renderPaidBox() {
-  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT, real = cfg.mode === 'solana', realMoney = real && cfg.network !== 'devnet';
-  box.style.display = paidMode ? 'block' : 'none'; if (!paidMode) return;
-  const netTxt = cfg.network === 'devnet' ? 'Solana <b>DEVNET</b> (test network — fake money, no real cost)' : 'Solana (real money!)';
-  box.innerHTML = (cfg.packs.length < 2 ? `<div><b>Prize: ${esc(cfg.packs[0].label)} · ${usd(cfg.packs[0].usd)}</b></div>` : '') + `${cfg.packs.length > 1 ? '<div><b>Pick the prize pack</b></div>' : ''}<div class="packs" style="${cfg.packs.length < 2 ? 'display:none' : ''}">${cfg.packs.map(p => `<button data-c="${p.code}" class="${p.code === paidPack ? 'sel' : ''}">${esc(p.label)} · ${usd(p.usd)}</button>`).join('')}</div>`
+  const box = $('paidBox'), cfg = paidCfg || PAID_DEFAULT, real = cfg.mode === 'solana';
+  box.style.display = lobbyMode === 'prize' ? 'block' : 'none'; if (lobbyMode !== 'prize') return;
+  const netTxt = cfg.network === 'devnet' ? 'Solana <b>DEVNET</b> (test — fake money)' : 'Solana network';
+  const pack = cfg.packs[0];
+  box.innerHTML = `<div class="pbHead"><b>Prize: ${esc(pack.label)} · ${usd(pack.usd)}</b><a href="/how#prize" target="_blank" rel="noopener">How it works ↗</a></div>`
     + (real ? `<div class="walletRow"><button id="walletBtn" class="${WALLET.pubkey ? 'ok' : ''}">${WALLET.pubkey ? '✓ ' + WALLET.pubkey.slice(0, 4) + '…' + WALLET.pubkey.slice(-4) : 'CONNECT WALLET'}</button><span>${netTxt}</span></div>` : '')
-    + `<div class="rules">Joining is free. When at least ${cfg.min} players are in the lobby, it locks and the pack price${cfg.fee ? ` (+ ${cfg.fee}% service fee)` : ''} is <b>split between everyone</b> (more players = cheaper). <a href="/how#prize" target="_blank" rel="noopener" style="color:#4fe3ff">How it works ↗</a><br>`
-    + (cfg.paused ? '<div class="rules" style="color:#ff9a9a"><b>Prize races are paused right now.</b> Try again later.</div>' : '')
-    + `Real players only, no bots. First to cross the finish line wins the pack${real ? ' — it is sent straight to the winner\'s wallet. You pay in <b>USDC</b> from your wallet (no SOL needed). The card is random: it can be worth more or less than the pack price.' : '. Payments are in <b>TEST mode</b> — no real money.'}</div>`;
-  box.querySelectorAll('.packs button').forEach(b => b.onclick = () => { paidPack = b.dataset.c; renderPaidBox(); play('click', { vol: 0.5 }); });
-  const wb = $('walletBtn'); if (wb) { wb.onclick = () => connectWallet(); }
-  $('playBtn').disabled = !!cfg.paused || (real && !WALLET.pubkey);
+    + `<div class="rules">${cfg.paused ? '<b style="color:#ff9a9a">Prize races are paused right now. Try again later.</b><br>' : ''}Joining is free. The price${cfg.fee ? ` (+${cfg.fee}% fee)` : ''} is split between all players when the lobby locks. Real players only, no bots. The winner's card goes straight to their wallet${real ? ' — you pay in USDC, no SOL needed. The card is random: it can be worth more or less than the pack price.' : '. (Test mode: no real payments.)'}</div>`;
+  const wb = $('walletBtn'); if (wb) wb.onclick = () => connectWallet();
 }
-function showMode() {
-  hideToast();
-  $('mode').style.display = 'block'; homeEl.style.display = 'none'; $('payBox').style.display = 'none'; paidMode = false;
+const MODES = {
+  free: { name: 'FREE RACE', icon: '🏁', desc: 'Race up to 16 players. Bots fill the empty spots. Free to play.', cta: 'PLAY' },
+  prize: { name: 'PRIZE RACE', icon: '🏆', desc: 'Real players only. Split a card pack — the winner takes it.', cta: 'FIND A PRIZE RACE' },
+  practice: { name: 'PRACTICE', icon: '🎯', desc: 'Train offline on any course, at your own pace.', cta: 'CHOOSE A COURSE' },
+};
+let lobbyMode = 'free';
+try { lobbyMode = localStorage.getItem('pr_mode') || 'free'; } catch { /* ignore */ }
+if (location.hash === '#prize') lobbyMode = 'prize'; else if (location.hash === '#free') lobbyMode = 'free'; else if (location.hash === '#practice') lobbyMode = 'practice';
+if (!MODES[lobbyMode]) lobbyMode = 'free';
+paidMode = lobbyMode === 'prize';
+function setLobbyMode(m, silent) { lobbyMode = m; paidMode = m === 'prize'; try { localStorage.setItem('pr_mode', m); } catch { /* ignore */ } hideToast(); renderLobby(); if (!silent) play('click', { vol: 0.5 }); }
+function renderCharCard() {
+  const c = CHARS[CHOICE.pk], name = ROSTER[CHOICE.pk][1], role = ROLES[c.role];
+  $('cName').textContent = name; $('cRole').textContent = role.name.toUpperCase();
+  $('cTag').textContent = c.tag + ' ' + role.blurb;
+  const chip = k => { const M = ITEM_META[k]; return `<div class="pwChip" style="--k:${M.col}" title="${esc(M.desc)}"><div class="ic">${M.icon}</div><div><b>${M.name}</b><small>${esc(M.desc)}</small></div></div>`; };
+  $('cStart').outerHTML = chip(c.start).replace('<div class="pwChip"', '<div class="pwChip" id="cStart"');
+  $('cLikely').innerHTML = c.likely.map(k => { const M = ITEM_META[k]; return `<div class="pwMini" style="--k:${M.col}" title="${esc(M.name)}: ${esc(M.desc)}"><div class="ic">${M.icon}</div><small>${M.name}</small></div>`; }).join('');
+  const note = $('cNote'), off = lobbyMode === 'prize';
+  note.className = 'cNote' + (off ? ' off' : '');
+  note.textContent = off ? 'Abilities are OFF in Prize Races: everyone starts with no power-up and the same odds, so the race is fair.' : 'Abilities are active in Free Race and Practice. “Likely” power-ups appear about 1.8× more often for this racer.';
 }
-function enterHome(paid) {
-  hideToast();
-  paidMode = paid; $('mode').style.display = 'none'; homeEl.style.display = 'block';
-  $('playBtn').textContent = paid ? 'FIND A PRIZE RACE' : 'PLAY'; $('practiceBtn').style.display = paid ? 'none' : '';
-  const tip = homeEl.querySelector('.tip'); if (tip) tip.textContent = paid ? 'Pick your character (← → keys work too) · prize races are real players only — no bots' : 'Pick your character (← → keys work too) · online races with up to 16 players, bots fill empty spots';
-  renderPaidBox(); if (!paid) $('playBtn').disabled = false; play('click', { vol: 0.5 });
+function renderLobby() {
+  const M = MODES[lobbyMode], cfg = paidCfg || PAID_DEFAULT;
+  $('modeName').textContent = M.name; $('modeIcon').textContent = M.icon; $('modeDesc').textContent = M.desc;
+  renderPaidBox(); renderCharCard();
+  const pb = $('playBtn'); pb.disabled = false; pb.textContent = M.cta;
+  if (lobbyMode === 'prize') {
+    if (cfg.paused) { pb.textContent = 'PAUSED'; pb.disabled = true; }
+    else if (cfg.mode === 'solana' && !WALLET.pubkey) pb.textContent = 'CONNECT WALLET';
+  }
+}
+function lobbyPlay() {
+  unlock();
+  if (lobbyMode === 'practice') { showPracticeMenu(); return; }
+  if (lobbyMode === 'prize') { const cfg = paidCfg || PAID_DEFAULT; if (cfg.paused) return; if (cfg.mode === 'solana' && !WALLET.pubkey) { connectWallet(); return; } }
+  goOnline();
 }
 let payKey = '';
 function showPayBox(p) {
@@ -652,7 +681,7 @@ function hidePayBox() { $('payBox').style.display = 'none'; payShown = false; pa
 function goOnline() {
   unlock(); const nm = $('nameIn').value.trim().slice(0, 14); CHOICE.name = nm;
   try { localStorage.setItem('sl_name', nm); localStorage.setItem('sl_pk', String(CHOICE.pk)); } catch { /* ignore */ }
-  $('home').style.display = 'none'; menuEl.style.display = 'none'; hideResults();
+  $('lobby').style.display = 'none'; menuEl.style.display = 'none'; hideResults();
   mode = 'online'; state = 'connecting'; msg.innerHTML = 'Connecting…'; paidRound = null; prizeState = null; hidePayBox();
   clearRacers(); snapBuf.length = 0;
   net = openSocket(wsUrl(), {
@@ -785,14 +814,21 @@ function applyRemote() {
 }
 
 // ---------- tela inicial (nome + personagem) e menu de prática ----------
-const homeEl = $('home'), menuEl = $('menu');
+const homeEl = $('lobby'), menuEl = $('menu');
 let preview = null, menuSel = 0;
 function setPreview() {
   if (preview) { scene.remove(preview.g); }
+  const col = { speedster: 0xffcb05, defender: 0x4fe3ff, trickster: 0xff4fa3, leaper: 0x5dff7a }[CHARS[CHOICE.pk].role] || pkColor(CHOICE.pk);   // cor do pedestal = papel do personagem
   const g = new THREE.Group(), body = buildPokemon(ROSTER[CHOICE.pk][0]); body.position.y = -0.75;
   const pivot = new THREE.Group(); pivot.position.y = 0.75; pivot.add(body); g.add(pivot);
+  const anim = new Animator(body.userData.rig, pivot, body); addOutline(body);
+  // pedestal brilhante (estilo lobby)
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.34, 0.2, 56), new THREE.MeshStandardMaterial({ color: 0x1b0d44, emissive: col, emissiveIntensity: 0.18, metalness: 0.55, roughness: 0.32 })); disc.position.y = -0.1; g.add(disc);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.16, 0.045, 14, 72), new THREE.MeshBasicMaterial({ color: col, toneMapped: false })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.012; g.add(ring);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(1.12, 56), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); glow.rotation.x = -Math.PI / 2; glow.position.y = 0.014; g.add(glow);
+  const light = new THREE.PointLight(col, 22, 9); light.position.set(0, 2.4, 2.2); g.add(light);
   g.position.set(0, 0.05, -1.5); scene.add(g);
-  preview = { g, anim: new Animator(body.userData.rig, pivot, body), yaw: 0.5 };
+  preview = { g, anim, yaw: preview ? preview.yaw : 0.5, pose: 0, col, ring, glow, spark: 0, drag: false };
 }
 let portraits = null;
 function makePortraits() {   // retratos 3D renderizados uma vez (cabeça/corpo de frente), usados como "fotos" na seleção
@@ -814,18 +850,19 @@ function makePortraits() {   // retratos 3D renderizados uma vez (cabeça/corpo 
 function buildPicker() {
   const pk = $('picker'); pk.innerHTML = '';
   if (!portraits) { try { makePortraits(); } catch (e) { portraits = []; } }
-  ROSTER.forEach(([, label], k) => {
-    const b = document.createElement('button'); b.className = 'card' + (k === CHOICE.pk ? ' sel' : ''); b.title = '';
+  ROSTER.forEach((_, k) => {
+    const b = document.createElement('button'); b.className = 'card' + (k === CHOICE.pk ? ' sel' : ''); b.title = ROSTER[k][1];
     b.style.setProperty('--h', Math.round((k * 22.5 + 8) % 360));
     if (portraits[k]) { const im = document.createElement('img'); im.src = portraits[k]; im.draggable = false; b.appendChild(im); }
-    b.onclick = () => { CHOICE.pk = k; buildPicker(); setPreview(); play('click', { vol: 0.5 }); };
+    b.onclick = () => selectChar(k);
     pk.appendChild(b);
   });
 }
+function selectChar(k) { CHOICE.pk = ((k % ROSTER.length) + ROSTER.length) % ROSTER.length; buildPicker(); setPreview(); renderCharCard(); play('click', { vol: 0.5 }); if (preview) preview.pose = 1.4; }
 function goHome() {
   closeNet(); mode = 'offline'; state = 'home'; hideResults(); spec.active = false; clearRacers();
-  menuEl.style.display = 'none'; showMode(); msg.textContent = ''; hud.textContent = ''; hidePayBox(); $('spec').style.display = 'none'; $('specTime').style.display = 'none';
-  $('nameIn').value = CHOICE.name; buildPicker(); setPreview();
+  menuEl.style.display = 'none'; homeEl.style.display = 'block'; msg.textContent = ''; hud.textContent = ''; hidePayBox(); hideToast(); $('spec').style.display = 'none'; $('specTime').style.display = 'none';
+  $('nameIn').value = CHOICE.name; buildPicker(); setPreview(); renderLobby();
   if (levelIndex !== 0) loadLevel(0);
 }
 function showPracticeMenu() {
@@ -836,22 +873,46 @@ function showPracticeMenu() {
   const selEl = menuEl.querySelector('.sel'); if (selEl) selEl.scrollIntoView({ block: 'nearest' });
   menuEl.querySelectorAll('.item').forEach(el => el.addEventListener('click', ev => { ev.stopPropagation(); menuSel = +el.dataset.i; unlock(); startOffline(menuSel); }));
 }
-$('freeBtn').onclick = () => { unlock(); enterHome(false); };
-$('paidBtn').onclick = () => { unlock(); enterHome(true); };
-$('backBtn').onclick = () => { showMode(); play('click', { vol: 0.5 }); };
-$('playBtn').onclick = () => goOnline();
-$('practiceBtn').onclick = () => { unlock(); showPracticeMenu(); };
-$('nameIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') goOnline(); });
+// modal "Change Mode"
+const modeModal = $('modeModal');
+function openModeModal() { modeModal.querySelectorAll('.mc').forEach(c => c.classList.toggle('sel', c.dataset.m === lobbyMode)); modeModal.style.display = 'flex'; play('click', { vol: 0.5 }); }
+function closeModeModal() { modeModal.style.display = 'none'; }
+modeModal.querySelectorAll('.mc').forEach(c => c.onclick = () => { unlock(); setLobbyMode(c.dataset.m); closeModeModal(); });
+modeModal.addEventListener('pointerdown', e => { if (e.target === modeModal) closeModeModal(); });
+$('modeBtn').onclick = () => { unlock(); openModeModal(); };
+$('playBtn').onclick = () => lobbyPlay();
+$('nameIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') lobbyPlay(); });
+// arrastar o personagem para girar; clique sem arrastar = pose
+(() => {
+  let sx = 0, sy = 0, moved = 0, lastX = 0, down = false;
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', e => { if (state !== 'home' || !preview || modeModal.style.display === 'flex') return; down = true; sx = lastX = e.clientX; sy = e.clientY; moved = 0; preview.drag = true; });
+  addEventListener('pointermove', e => { if (!down || !preview) return; const dx = e.clientX - lastX; lastX = e.clientX; moved += Math.abs(dx); preview.yaw += dx * 0.012; });
+  addEventListener('pointerup', () => { if (!down) return; down = false; if (preview) { preview.drag = false; if (moved < 6) { preview.pose = 1.6; play('click', { vol: 0.4 }); } } });
+})();
+// volume
+(() => {
+  const btn = $('volBtn'), sl = $('volSlider');
+  const apply = () => {
+    master.gain.value = volMuted ? 0 : volLevel; sl.value = String(Math.round(volLevel * 100));
+    btn.textContent = volMuted || volLevel === 0 ? '🔇' : volLevel < 0.35 ? '🔈' : volLevel < 0.7 ? '🔉' : '🔊';
+    try { localStorage.setItem('pr_vol', String(volLevel)); localStorage.setItem('pr_mute', volMuted ? '1' : '0'); } catch { /* ignore */ }
+  };
+  btn.onclick = () => { unlock(); volMuted = !volMuted; if (!volMuted && volLevel === 0) volLevel = 0.5; apply(); };
+  sl.oninput = () => { unlock(); volLevel = +sl.value / 100; volMuted = false; apply(); };
+  sl.addEventListener('keydown', e => e.stopPropagation()); sl.addEventListener('change', () => sl.blur());
+  apply();
+})();
 
 // ---------- entrada ----------
 addEventListener('keydown', e => {
   unlock();
   if (state === 'home') {
-    if ($('mode').style.display !== 'none') return;
+    if (modeModal.style.display === 'flex') { if (e.code === 'Escape') closeModeModal(); return; }
     if (document.activeElement === $('nameIn')) return;
-    if (e.code === 'ArrowLeft') { CHOICE.pk = (CHOICE.pk + ROSTER.length - 1) % ROSTER.length; buildPicker(); setPreview(); }
-    else if (e.code === 'ArrowRight') { CHOICE.pk = (CHOICE.pk + 1) % ROSTER.length; buildPicker(); setPreview(); }
-    else if (e.code === 'Enter') goOnline();
+    if (e.code === 'ArrowLeft') selectChar(CHOICE.pk - 1);
+    else if (e.code === 'ArrowRight') selectChar(CHOICE.pk + 1);
+    else if (e.code === 'Enter') lobbyPlay();
     return;
   }
   if (state === 'menu') {
@@ -929,14 +990,23 @@ function render(dt = 0) {
   animSpots(dt, performance.now() / 1000);
   const tn = performance.now() / 1000;
   if (homeView) {
-    // tela inicial: personagem escolhido girando diante da câmera
-    if (preview) { preview.yaw += dt * 0.8; preview.g.rotation.y = preview.yaw; preview.anim.update({ vel: { x: 0, y: 0, z: 0 }, grounded: true, dive: 0, stun: 0, victory: false }, dt); }
-    camera.position.set(0, 1.7, 4.6); camera.lookAt(0, -0.35, -1.5);
+    // lobby: personagem no pedestal, câmera enquadrada, faíscas subindo
+    levelGroup.visible = false;
+    if (preview) {
+      const pv = preview;
+      if (!pv.drag) pv.yaw += dt * 0.45;
+      pv.g.rotation.y = pv.yaw; pv.pose = Math.max(0, pv.pose - dt);
+      pv.anim.update({ vel: { x: 0, y: 0, z: 0 }, grounded: true, dive: 0, stun: 0, victory: pv.pose > 0 }, dt);
+      pv.ring.material.opacity = 1; pv.glow.material.opacity = 0.22 + 0.1 * Math.sin(tn * 2.4); pv.ring.scale.setScalar(1 + 0.012 * Math.sin(tn * 3));
+      pv.spark -= dt; if (pv.spark <= 0) { pv.spark = 0.07; const a = Math.random() * Math.PI * 2, rr = 0.9 * Math.random() + 0.2; FX.emit(pv.g.position.x + Math.cos(a) * rr, 0.1, pv.g.position.z + Math.sin(a) * rr, 1, { color: pv.col, color2: 0xffffff, size: 0.28, life: 1.1, speed: 0.15, up: 1.8, gravity: 0.5, glow: 2.4 }); }
+    }
+    if (Math.abs(camera.fov - 40) > 0.05) { camera.fov = 40; camera.updateProjectionMatrix(); }
+    camera.position.set(0, 1.5, 5.1); camera.lookAt(0, 0.72, -1.5);
     sky.update(camera, tn); seaObj.update(tn, 0, -20); grassUniforms.uTime.value = tn; cloudUpdate(dt);
     sun.position.set(sunOff.x, 55, sunOff.z - 1.5); sun.target.position.set(0, 0, -1.5);
-    for (const f of flags) f.cloth.rotation.y = f.base + Math.sin(tn * 2.2 + f.ph) * 0.18;
     FX.update(dt, tn, camera.position); FX.render(); return;
   }
+  levelGroup.visible = true;
   if (preview) { scene.remove(preview.g); preview = null; }
   if (convHandle) convHandle.g.gain.value = (world.conveyorZone && player.pos.z < world.conveyorZone[1] && player.pos.z > world.conveyorZone[0]) ? Math.max(0, 0.5 - Math.abs(player.pos.x) / 14) : 0;
   spec.active = player.finished && (state === 'race' || state === 'end' || state === 'countdown');

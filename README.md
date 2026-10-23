@@ -72,3 +72,7 @@ Na tela da sala paga há só um aviso curto de que a carta é aleatória (sem te
 ### Trocar o pacote / testar barato
 `PACK_CODE`, `PACK_USD`, `PACK_LABEL` mudam o pacote do prêmio (padrão `pokemon_25` / 25 / Starter Pack). `PACK_CODE=eopoke_25` é um pacote Pokémon de US$ 25 com valor esperado 25 e recompra de 94% (o Starter tem 85%).
 Teste de pagamento/reembolso por centavos: `PACK_USD=0.5` + `PRIZE_MODE=manual` + `HOUSE_FEE_PCT=0` (não compra pacote; o dinheiro dos testes fica na casa). Se `PRIZE_MODE=auto` com `PACK_USD` abaixo do preço real, a compra é recusada e todos são reembolsados.
+
+## Rotas
+`/` landing page · `/play` o jogo (lobby: escolhe personagem e modo; `/play#free` e `/play#prize` já abrem no modo certo) · `/how` como funciona · `/paid/config` configuração pública das salas pagas · `/health`.
+Habilidades de personagem (poder inicial + poderes favoritos) estão em `shared/roster.js`; ficam desligadas nas salas com prêmio.
