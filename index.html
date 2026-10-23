@@ -142,6 +142,12 @@ kbd{display:inline-block;min-width:24px;padding:1px 6px;margin:0 2px;border-radi
 .mc span{font-size:14px;color:#d6ccf7;line-height:1.4}
 .mc em{font-style:normal;font-size:12px;font-weight:800;padding:3px 12px;border-radius:99px;background:#0007}
 .mc.sel{border-color:#ffcb05;box-shadow:0 0 0 3px #ffcb0555,0 0 40px #ffcb0555}
+.mc.m-prize{animation:packPulse3 2.6s ease-in-out infinite}
+@keyframes packPulse3{0%,100%{box-shadow:0 0 18px #ffcb0544}50%{box-shadow:0 0 44px #ffcb05bb}}
+.modePanel.pack:before{background:linear-gradient(90deg,#ffd84f,#ff8a1a)}
+.modePanel.pack{border-color:#ffcb05aa;box-shadow:0 10px 30px #0009,0 0 26px #ffcb0566}
+.ready.orange{background:linear-gradient(180deg,#ffd84f,#ff8a1a);box-shadow:0 6px 0 #a64b00,0 0 28px #ffcb0577;animation:packPulse 2.6s ease-in-out infinite}
+@keyframes packPulse{0%,100%{box-shadow:0 6px 0 #a64b00,0 0 22px #ffcb0566}50%{box-shadow:0 6px 0 #a64b00,0 0 44px #ffcb05cc}}
 .mc.m-free{background:linear-gradient(160deg,#1f9d4a,#0c5a2b)}.mc.m-prize{background:linear-gradient(160deg,#ff9a1a,#b5400a)}.mc.m-practice{background:linear-gradient(160deg,#4b52e8,#241a8c)}
 /* volume */
 #vol{position:fixed;top:12px;right:12px;z-index:40;display:flex;align-items:center;gap:6px;padding:4px 6px 4px 4px;border-radius:99px;background:#12062dcc;border:1px solid #ffffff3a;box-shadow:0 4px 14px #0008}
@@ -196,7 +202,7 @@ kbd{display:inline-block;min-width:24px;padding:1px 6px;margin:0 2px;border-radi
   <h3>CHOOSE YOUR GAME MODE</h3>
   <div class="cards">
     <button class="mc m-free" data-m="free"><div class="ic">🏁</div><b>FREE RACE</b><span>Race up to 16 players. Bots fill the empty spots. No payment, no wallet.</span><em>FREE</em></button>
-    <button class="mc m-prize" data-m="prize"><div class="ic">🏆</div><b>PRIZE RACE</b><span>Real players only. Everyone splits the price of a card pack — the winner takes it.</span><em>WALLET · USDC</em></button>
+    <button class="mc m-prize" data-m="prize"><div class="ic">🏆</div><b>PACK RACE</b><span>Real players only. Everyone splits the price of a card pack — the winner takes it.</span><em>WALLET · USDC</em></button>
     <button class="mc m-practice" data-m="practice"><div class="ic">🎯</div><b>PRACTICE</b><span>Train offline on any course, at your own pace. No other players.</span><em>OFFLINE</em></button>
   </div>
 </div></div>

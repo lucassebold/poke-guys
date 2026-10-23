@@ -51,16 +51,27 @@ details p{margin:8px 0 2px;color:var(--mut)}
 .flow i{color:var(--y);font-style:normal;font-weight:900}
 footer{margin-top:50px;text-align:center;color:var(--mut);font-size:13px}
 code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-break:break-all}
+
+/* destaque do "Play for pack" em todos os lugares */
+.packLink{display:inline-block;background:linear-gradient(180deg,#ffd84f,#ff8a1a)!important;color:#2a1055!important;padding:7px 16px;border-radius:99px;font-weight:900;box-shadow:0 0 18px #ffcb0577;animation:packPulse 2.6s ease-in-out infinite;text-decoration:none}
+.packLink:hover{filter:brightness(1.1);color:#2a1055!important}
+.eyebrow.pack{background:linear-gradient(180deg,#ffd84f,#ff8a1a);color:#2a1055;border-color:#fff8;box-shadow:0 0 18px #ffcb0577}
+.btn.paid{animation:packPulse 2.6s ease-in-out infinite}
+@keyframes packPulse{0%,100%{box-shadow:0 6px 0 #a64b00,0 0 22px #ffcb0566}50%{box-shadow:0 6px 0 #a64b00,0 0 44px #ffcb05cc}}
+.packLink{animation-name:packPulse2}
+@keyframes packPulse2{0%,100%{box-shadow:0 0 14px #ffcb0566}50%{box-shadow:0 0 30px #ffcb05cc}}
+h2.packH{background:linear-gradient(90deg,#ffd84f,#ff8a1a);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 14px #ffcb0566)}
+.btn.paid{box-shadow:0 5px 0 #a64b00}
 </style></head><body><div class="wrap">
 
 <header>
   <h1 class="logo"><a href="/" style="text-decoration:none;color:inherit">POKE RUN</a></h1>
   <p>How it works</p>
-  <div class="cta"><a class="btn free" href="/play#free">▶ Play free</a><a class="btn paid" href="/play#prize">🏆 Play for prize</a></div>
-  <div class="testbanner" id="testBanner">⚠ This server is on the <b>Solana test network</b>: prize races use fake test money and test cards.</div>
+  <div class="cta"><a class="btn free" href="/play#free">▶ Play free</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PACK</a></div>
+  <div class="testbanner" id="testBanner">⚠ This server is on the <b>Solana test network</b>: pack races use fake test money and test cards.</div>
 </header>
 
-<nav><a href="#game">The game</a><a href="#controls">Controls</a><a href="#course">Obstacles</a><a href="#powers">Power-ups</a><a href="#free">Play free</a><a href="#prize">Play for prize</a></nav>
+<nav><a href="#game">The game</a><a href="#controls">Controls</a><a href="#course">Obstacles</a><a href="#powers">Power-ups</a><a href="#free">Play free</a><a class="packLink" href="#prize">🏆 Play for pack</a></nav>
 
 <section id="game">
   <h2>The game in 30 seconds<small>A fast, chaotic obstacle-course race for up to 16 players.</small></h2>
@@ -128,7 +139,7 @@ code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-brea
 </section>
 
 <section id="prize">
-  <h2>Play for prize<small>Real players only. The winner takes a card pack. Everyone shares the cost.</small></h2>
+  <h2 class="packH">🏆 Play for pack<small>Real players only. The winner takes a card pack. Everyone shares the cost.</small></h2>
 
   <div class="card">
     <h3 style="margin-top:0">In one sentence</h3>
@@ -137,8 +148,8 @@ code{background:#0006;padding:1px 6px;border-radius:6px;font-size:13px;word-brea
 
   <h3>Step by step</h3>
   <div class="card">
-    <div class="step"><div class="num">1</div><div><b>Choose “Play for prize” and connect your wallet</b><span>You need a Solana wallet such as <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>. Connecting only shares your public address — the game never sees your secret keys.</span></div></div>
-    <div class="step"><div class="num">2</div><div><b>Join a lobby — it's free</b><span>Nothing is charged when you join. The lobby waits for at least <b id="minP">2</b> real players (up to 16). There are <b>no bots</b> in prize races.</span></div></div>
+    <div class="step"><div class="num">1</div><div><b>Choose “Play for pack” and connect your wallet</b><span>You need a Solana wallet such as <a href="https://phantom.app" target="_blank" rel="noopener">Phantom</a>. Connecting only shares your public address — the game never sees your secret keys.</span></div></div>
+    <div class="step"><div class="num">2</div><div><b>Join a lobby — it's free</b><span>Nothing is charged when you join. The lobby waits for at least <b id="minP">2</b> real players (up to 16). There are <b>no bots</b> in pack races.</span></div></div>
     <div class="step"><div class="num">3</div><div><b>The lobby locks and the price is split</b><span>When there are enough players, you get <b id="startS">20</b> seconds for more to join (more players = cheaper for everyone). Then the lobby locks and the pack price is <b>divided between all players</b>.</span></div></div>
     <div class="step"><div class="num">4</div><div><b>Everyone pays their share in USDC</b><span>You have <b id="payS">60</b> seconds to approve one payment in your wallet. You pay in <b>USDC</b> (a dollar-pegged coin) and you <b>don't need any SOL</b> — the game covers the network fee.</span></div></div>
     <div class="step"><div class="num">5</div><div><b>Race!</b><span>When everyone has paid, the race starts. Same game, same controls — only real players, so every position counts.</span></div></div>
@@ -175,7 +186,7 @@ fetch('/paid/config').then(r => r.json()).then(c => {
   const total = +pack.usd * (1 + fee / 100), rows = document.getElementById('priceRows'); rows.innerHTML = '';
   for (const n of [2, 3, 4, 6, 8, 12, 16]) { const share = Math.ceil(total * 100 / n) / 100; rows.insertAdjacentHTML('beforeend', `<tr><td class="n">${n} players</td><td><b>${usd(share)}</b> each</td><td>${usd(share * n)}</td></tr>`); }
   if (c.network === 'devnet') document.getElementById('testBanner').style.display = 'block';
-  if (c.mode === 'sim') { document.getElementById('testBanner').style.display = 'block'; document.getElementById('testBanner').innerHTML = '⚠ Prize races on this server run in <b>simulation mode</b> (no real payments).'; }
+  if (c.mode === 'sim') { document.getElementById('testBanner').style.display = 'block'; document.getElementById('testBanner').innerHTML = '⚠ Pack races on this server run in <b>simulation mode</b> (no real payments).'; }
 }).catch(() => {
   const rows = document.getElementById('priceRows');
   for (const n of [2, 3, 4, 6, 8, 12, 16]) { const share = Math.ceil(2500 / n) / 100; rows.insertAdjacentHTML('beforeend', `<tr><td class="n">${n} players</td><td><b>$${share.toFixed(2)}</b> each</td><td>$${(share * n).toFixed(2)}</td></tr>`); }

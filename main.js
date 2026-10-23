@@ -620,12 +620,12 @@ function renderPaidBox() {
   const pack = cfg.packs[0];
   box.innerHTML = `<div class="pbHead"><b>Prize: ${esc(pack.label)} · ${usd(pack.usd)}</b><a href="/how#prize" target="_blank" rel="noopener">How it works ↗</a></div>`
     + (real ? `<div class="walletRow"><button id="walletBtn" class="${WALLET.pubkey ? 'ok' : ''}">${WALLET.pubkey ? '✓ ' + WALLET.pubkey.slice(0, 4) + '…' + WALLET.pubkey.slice(-4) : 'CONNECT WALLET'}</button><span>${netTxt}</span></div>` : '')
-    + `<div class="rules">${cfg.paused ? '<b style="color:#ff9a9a">Prize races are paused right now. Try again later.</b><br>' : ''}Joining is free. The price${cfg.fee ? ` (+${cfg.fee}% fee)` : ''} is split between all players when the lobby locks. Real players only, no bots. The winner's card goes straight to their wallet${real ? ' — you pay in USDC, no SOL needed. The card is random: it can be worth more or less than the pack price.' : '. (Test mode: no real payments.)'}</div>`;
+    + `<div class="rules">${cfg.paused ? '<b style="color:#ff9a9a">Pack races are paused right now. Try again later.</b><br>' : ''}Joining is free. The price${cfg.fee ? ` (+${cfg.fee}% fee)` : ''} is split between all players when the lobby locks. Real players only, no bots. The winner's card goes straight to their wallet${real ? ' — you pay in USDC, no SOL needed. The card is random: it can be worth more or less than the pack price.' : '. (Test mode: no real payments.)'}</div>`;
   const wb = $('walletBtn'); if (wb) wb.onclick = () => connectWallet();
 }
 const MODES = {
   free: { name: 'FREE RACE', icon: '🏁', desc: 'Race up to 16 players. Bots fill the empty spots. Free to play.', cta: 'PLAY' },
-  prize: { name: 'PRIZE RACE', icon: '🏆', desc: 'Real players only. Split a card pack — the winner takes it.', cta: 'FIND A PRIZE RACE' },
+  prize: { name: 'PACK RACE', icon: '🏆', desc: 'Real players only. Split a card pack — the winner takes it.', cta: '🏆 PLAY FOR PACK' },
   practice: { name: 'PRACTICE', icon: '🎯', desc: 'Train offline on any course, at your own pace.', cta: 'CHOOSE A COURSE' },
 };
 let lobbyMode = 'free';
@@ -643,13 +643,14 @@ function renderCharCard() {
   $('cLikely').innerHTML = c.likely.map(k => { const M = ITEM_META[k]; return `<div class="pwMini" style="--k:${M.col}" title="${esc(M.name)}: ${esc(M.desc)}"><div class="ic">${M.icon}</div><small>${M.name}</small></div>`; }).join('');
   const note = $('cNote'), off = lobbyMode === 'prize';
   note.className = 'cNote' + (off ? ' off' : '');
-  note.textContent = off ? 'Abilities are OFF in Prize Races: everyone starts with no power-up and the same odds, so the race is fair.' : 'Abilities are active in Free Race and Practice. “Likely” power-ups appear about 1.8× more often for this racer.';
+  note.textContent = off ? 'Abilities are OFF in Pack Races: everyone starts with no power-up and the same odds, so the race is fair.' : 'Abilities are active in Free Race and Practice. “Likely” power-ups appear about 1.8× more often for this racer.';
 }
 function renderLobby() {
   const M = MODES[lobbyMode], cfg = paidCfg || PAID_DEFAULT;
   $('modeName').textContent = M.name; $('modeIcon').textContent = M.icon; $('modeDesc').textContent = M.desc;
   renderPaidBox(); renderCharCard();
   const pb = $('playBtn'); pb.disabled = false; pb.textContent = M.cta;
+  pb.classList.toggle('orange', lobbyMode === 'prize'); document.querySelector('.modePanel').classList.toggle('pack', lobbyMode === 'prize');   // destaque laranja no modo Play for Pack
   if (lobbyMode === 'prize') {
     if (cfg.paused) { pb.textContent = 'PAUSED'; pb.disabled = true; }
     else if (cfg.mode === 'solana' && !WALLET.pubkey) pb.textContent = 'CONNECT WALLET';
@@ -720,7 +721,7 @@ function onNetMsg(m) {
   } else if (m.t === 'paytx') {
     setPayMsg('Approve the payment in your wallet…'); signAndReturn(m.tx);
   } else if (m.t === 'paidoff') {
-    closeNet(); msg.innerHTML = 'Prize races are paused<small>try again later — returning to the main screen…</small>'; setTimeout(goHome, 3000);
+    closeNet(); msg.innerHTML = 'Pack races are paused<small>try again later — returning to the main screen…</small>'; setTimeout(goHome, 3000);
   } else if (m.t === 'payfail') {
     setPayError(m.reason || 'Payment failed');
   } else if (m.t === 'prize') {

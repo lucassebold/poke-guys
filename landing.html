@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Poke Run — the chaotic obstacle race for up to 16 players</title>
-<meta name="description" content="Dodge hammers, ride giant slides and grab wild power-ups. Race up to 16 players in your browser — free to play, with optional prize races.">
+<meta name="description" content="Dodge hammers, ride giant slides and grab wild power-ups. Race up to 16 players in your browser — free to play, with optional card-pack races.">
 <meta property="og:title" content="Poke Run — 16 racers. One finish line. Pure chaos.">
 <meta property="og:description" content="A fast, chaotic obstacle race in your browser. Free to play, no sign-up.">
 <meta property="og:type" content="website">
@@ -95,12 +95,21 @@ footer a{color:var(--mut);text-decoration:none}footer a:hover{color:#fff}
 }
 @media (max-width:520px){.btn{width:100%}.cta{gap:12px}.roles,.powers{grid-template-columns:1fr}}
 @media (pointer:coarse){.desk{display:block}}
+
+/* destaque do "Play for pack" em todos os lugares */
+.packLink{display:inline-block;background:linear-gradient(180deg,#ffd84f,#ff8a1a)!important;color:#2a1055!important;padding:7px 16px;border-radius:99px;font-weight:900;box-shadow:0 0 18px #ffcb0577;animation:packPulse 2.6s ease-in-out infinite;text-decoration:none}
+.packLink:hover{filter:brightness(1.1);color:#2a1055!important}
+.eyebrow.pack{background:linear-gradient(180deg,#ffd84f,#ff8a1a);color:#2a1055;border-color:#fff8;box-shadow:0 0 18px #ffcb0577}
+.btn.paid{animation:packPulse 2.6s ease-in-out infinite}
+@keyframes packPulse{0%,100%{box-shadow:0 6px 0 #a64b00,0 0 22px #ffcb0566}50%{box-shadow:0 6px 0 #a64b00,0 0 44px #ffcb05cc}}
+.packLink{animation-name:packPulse2}
+@keyframes packPulse2{0%,100%{box-shadow:0 0 14px #ffcb0566}50%{box-shadow:0 0 30px #ffcb05cc}}
 </style></head><body>
 <div class="bgglow"></div>
 <div class="wrap">
 
 <nav><a class="logo" href="/">POKE RUN</a>
-  <div class="links"><a href="#how">How it works</a><a href="#racers">Racers</a><a href="#powers">Power-ups</a><a href="#prize">Play for prize</a></div>
+  <div class="links"><a href="#how">How it works</a><a href="#racers">Racers</a><a href="#powers">Power-ups</a><a class="packLink" href="#prize">🏆 Play for pack</a></div>
   <a class="btn free sm" href="/play#free">▶ Play free</a></nav>
 <div class="desk">📱 Poke Run is played with a keyboard — open it on a computer for the best experience.</div>
 
@@ -109,7 +118,7 @@ footer a{color:var(--mut);text-decoration:none}footer a:hover{color:#fff}
     <span class="eyebrow">FREE · NO SIGN-UP · IN YOUR BROWSER</span>
     <h1>16 racers.<br>One finish line.<br><em>Pure chaos.</em></h1>
     <p class="sub">Dodge hammers, ride giant slides, grab wild power-ups and race your friends. Want more? Race for a real card pack.</p>
-    <div class="cta"><a class="btn free" href="/play#free">▶ PLAY FREE</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PRIZE</a></div>
+    <div class="cta"><a class="btn free" href="/play#free">▶ PLAY FREE</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PACK</a></div>
     <div class="trust"><span>Up to 16 players</span><span>15 courses</span><span>8 power-ups</span></div>
   </div>
   <div class="art"><img src="/assets/landing/cover.jpg" srcset="/assets/landing/cover_sm.jpg 600w, /assets/landing/cover.jpg 1100w" sizes="(max-width:900px) 90vw, 560px" alt="Poke Run key art"></div>
@@ -166,7 +175,7 @@ footer a{color:var(--mut);text-decoration:none}footer a:hover{color:#fff}
 <section id="prize">
   <div class="prize">
     <div>
-      <span class="eyebrow">PLAY FOR PRIZE</span>
+      <span class="eyebrow pack">🏆 PLAY FOR PACK</span>
       <h2 style="margin-top:10px">Split the pack.<br>Winner takes the card.</h2>
       <p class="lead">Everyone shares the price of one card pack. First to finish wins it — sent straight to their wallet.</p>
       <div class="flow">
@@ -190,11 +199,11 @@ footer a{color:var(--mut);text-decoration:none}footer a:hover{color:#fff}
 <div class="final">
   <h2>Ready to race?</h2>
   <p>Free to play. Zero sign-up. Takes 10 seconds.</p>
-  <div class="cta" style="margin-top:26px"><a class="btn free" href="/play#free">▶ PLAY FREE</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PRIZE</a></div>
+  <div class="cta" style="margin-top:26px"><a class="btn free" href="/play#free">▶ PLAY FREE</a><a class="btn paid" href="/play#prize">🏆 PLAY FOR PACK</a></div>
 </div>
 
 <footer>
-  <div class="l"><a href="/how">How it works</a><a href="#racers">Racers</a><a href="#powers">Power-ups</a><a href="/play#prize">Play for prize</a></div>
+  <div class="l"><a href="/how">How it works</a><a href="#racers">Racers</a><a href="#powers">Power-ups</a><a class="packLink" href="/play#prize">🏆 Play for pack</a></div>
   Poke Run is an independent fan project — not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.
 </footer>
 </div>

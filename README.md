@@ -49,7 +49,7 @@ Custo: o plano gratuito/trial do Railway tem créditos limitados; um servidor de
 - `evidence/` e `tools/` (engenharia reversa) ficam fora do repositório (`.gitignore`); a documentação está em `EVIDENCIA.md`.
 
 ## Salas pagas (valendo prêmio) — pagamento SIMULADO
-Tela inicial: **Play free** ou **Play for prize**. Na sala paga entrar é grátis; com pelo menos 2 jogadores o lobby trava e o preço do pacote escolhido
+Tela inicial: **Play free** ou **Play for pack**. Na sala paga entrar é grátis; com pelo menos 2 jogadores o lobby trava e o preço do pacote escolhido
 (Starter US$25 / Elite US$50 / Bronze US$100) é **dividido entre todos**. Quando todos pagam, a corrida começa **sem bots**; o 1º a cruzar a linha leva o pacote.
 Quem não paga a tempo é removido e os pagamentos são devolvidos (o preço é recalculado). Sem 2 jogadores em 90 s a sala cancela.
 Variáveis: `PAID_MIN`, `PAID_WAIT`, `PAID_START`, `PAY_WINDOW`, `PAYMENT_MODE` (só `sim` por enquanto). O histórico (PAY / REFUND / WINNER / SUSPECT) vai para os logs do servidor.
