@@ -823,10 +823,10 @@ function setPreview() {
   const pivot = new THREE.Group(); pivot.position.y = 0.75; pivot.add(body); g.add(pivot);
   const anim = new Animator(body.userData.rig, pivot, body); addOutline(body);
   // pedestal brilhante (estilo lobby)
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.34, 0.2, 56), new THREE.MeshStandardMaterial({ color: 0x1b0d44, emissive: col, emissiveIntensity: 0.18, metalness: 0.55, roughness: 0.32 })); disc.position.y = -0.1; g.add(disc);
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.34, 0.2, 56), new THREE.MeshStandardMaterial({ color: 0x1b0d44, emissive: col, emissiveIntensity: 0.1, metalness: 0.55, roughness: 0.32 })); disc.position.y = -0.1; g.add(disc);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(1.16, 0.045, 14, 72), new THREE.MeshBasicMaterial({ color: col, toneMapped: false })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.012; g.add(ring);
-  const glow = new THREE.Mesh(new THREE.CircleGeometry(1.12, 56), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); glow.rotation.x = -Math.PI / 2; glow.position.y = 0.014; g.add(glow);
-  const light = new THREE.PointLight(col, 22, 9); light.position.set(0, 2.4, 2.2); g.add(light);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(1.12, 56), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); glow.rotation.x = -Math.PI / 2; glow.position.y = 0.014; g.add(glow);
+  const light = new THREE.PointLight(new THREE.Color(col).lerp(new THREE.Color(0xffffff), 0.65), 5, 9);   // luz suave e quase branca: o bloom não estoura personagens amarelos light.position.set(0, 2.4, 2.2); g.add(light);
   g.position.set(0, 0.05, -1.5); scene.add(g);
   preview = { g, anim, yaw: preview ? preview.yaw : 0.5, pose: 0, col, ring, glow, spark: 0, drag: false };
 }
@@ -997,7 +997,7 @@ function render(dt = 0) {
       if (!pv.drag) pv.yaw += dt * 0.45;
       pv.g.rotation.y = pv.yaw; pv.pose = Math.max(0, pv.pose - dt);
       pv.anim.update({ vel: { x: 0, y: 0, z: 0 }, grounded: true, dive: 0, stun: 0, victory: pv.pose > 0 }, dt);
-      pv.ring.material.opacity = 1; pv.glow.material.opacity = 0.22 + 0.1 * Math.sin(tn * 2.4); pv.ring.scale.setScalar(1 + 0.012 * Math.sin(tn * 3));
+      pv.ring.material.opacity = 1; pv.glow.material.opacity = 0.14 + 0.07 * Math.sin(tn * 2.4); pv.ring.scale.setScalar(1 + 0.012 * Math.sin(tn * 3));
       pv.spark -= dt; if (pv.spark <= 0) { pv.spark = 0.07; const a = Math.random() * Math.PI * 2, rr = 0.9 * Math.random() + 0.2; FX.emit(pv.g.position.x + Math.cos(a) * rr, 0.1, pv.g.position.z + Math.sin(a) * rr, 1, { color: pv.col, color2: 0xffffff, size: 0.28, life: 1.1, speed: 0.15, up: 1.8, gravity: 0.5, glow: 2.4 }); }
     }
     if (Math.abs(camera.fov - 40) > 0.05) { camera.fov = 40; camera.updateProjectionMatrix(); }
